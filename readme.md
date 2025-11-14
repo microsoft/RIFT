@@ -36,6 +36,12 @@ In order to use the whole toolsuite, the following dependencies need to be insta
 * You will have to install Ida, download Diaphora(https://github.com/joxeankoret/diaphora) and FLAIR tools (https://docs.hex-rays.com/user-guide/helper-tools)
 * Furthermore, you will also need to adjust the rift_config.cfg. You need to set the paths to the corresponding tools
 
+## Updating Commithash JSON File
+
+RIFT depends on `data/rustc_hashes.json` to determine the rust version of the corresponding commit hash. This file should be updated regularily.
+To update, simply `cd` into the `RIFT` folder and run `update_rustc_hashes.ps1` or `update_rustc_hashes.sh` and the `data/rustc_hashes.json` file will be updated.
+It's worthwhile noting that this process will take a few minutes. The script requires `awscli` and `python3` to be installed.
+
 ## Usage Guide
 
 For a hands-on guide, check the `docs` folder for a step-by-step guide on how to use RIFT on real-world malware. The procedure can be summarized as follows:
