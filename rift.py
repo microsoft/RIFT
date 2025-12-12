@@ -39,7 +39,7 @@ def handle_collection(rift_fs, compile_info):
     if rustup_path is None:
         logger.error("Collection phase failed! Could not find .rustup location!")
         return False
-    tc_rlib_folder = rift_fs.get_tc_rlib_folder(rustup_path, compile_info["rust_version"], compile_info["target"])
+    tc_rlib_folder = rift_fs.get_tc_rlib_folder(rustup_path, compile_info["target_compiler"], compile_info["target"])
     if tc_rlib_folder is None:
         logger.error("Collection phase failed! Could not find rlib files of toolchain!")
         return False
@@ -49,8 +49,7 @@ def handle_collection(rift_fs, compile_info):
     # collect crates
     crates_rlib_folder = rift_fs.get_crates_rlib_folder(compile_info["proj_path"], compile_info["target"], compile_info["compile_type"])
     if crates_rlib_folder is None:
-        logger.error("Collection phase failed! Could not find crates rlib files!")
-        return False
+        logger.error("Could not find crates rlib files!")
     rift_fs.unpack_rlibs_to(utils.get_files_from_dir(crates_rlib_folder, ".rlib"), rift_fs.coff_crates_path, rift_fs.tmp_crates_path)
 
     return True
@@ -178,8 +177,11 @@ def main(args):
         logger.error(f"Failed compilation phase! Aborting ..")
         return 0
     
-    logger.info(f"Compiled Crates:\n {'\n'.join(compile_info['compiled_crates'])}")
-    logger.info(f"Failed crates: {'\n'.join(compile_info['failed_crates']) if len(compile_info['failed_crates']) > 0 else ''}")
+    compiled_crates = "\n".join(compile_info["compiled_crates"])
+    logger.info(f"Compiled Crates:\n %s", compiled_crates)
+    if len(compile_info["failed_crates"]) > 0:
+        failed_crates = "\n".join(compile_info["failed_crates"])
+        logger.info(f"Failed crates: \n %s", failed_crates)
 
     compile_info_path = os.path.join(rift_fs.info_path, "rift_compile_info.json")
     utils.write_json(compile_info_path, compile_info["proj_config"])   

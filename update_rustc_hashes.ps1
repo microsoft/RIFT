@@ -54,18 +54,34 @@ if (-not (Test-Path (Split-Path $tmpFile) -PathType Container)) {
     Write-Host "[RIFT] Tmp folder does not exist for tmpFile: $(Split-Path $tmpFile)"
     exit
 }
-Write-Host "[RIFT] Running AWS command, storing result in $tmpFile"
+# Check if we're updating an existing file
+$updateMode = Test-Path $outputFile -PathType Leaf
+$pyArgs = "-i `"$tmpFile`" -o `"$outputFile`""
 
-# Run AWS command
-Start-Process -FilePath "aws" `
-    -ArgumentList "--no-sign-request s3 ls s3://static-rust-lang-org/dist/" `
-    -RedirectStandardOutput $tmpFile `
-    -NoNewWindow `
-    -Wait
+if ($updateMode) {
+    Write-Host "[RIFT] Existing rustc_hashes.json found, running in update mode"
+    Write-Host "[RIFT] Running AWS command (non-recursive), storing result in $tmpFile"
+    # Run AWS command without --recursive for update mode
+    Start-Process -FilePath "aws" `
+        -ArgumentList "--no-sign-request s3 ls s3://static-rust-lang-org/dist/" `
+        -RedirectStandardOutput $tmpFile `
+        -NoNewWindow `
+        -Wait
+    $pyArgs += " --update `"$outputFile`""
+} else {
+    Write-Host "[RIFT] No existing rustc_hashes.json found, running full collection"
+    Write-Host "[RIFT] Running AWS command (recursive), storing result in $tmpFile"
+    # Run AWS command with --recursive for full collection
+    Start-Process -FilePath "aws" `
+        -ArgumentList "--no-sign-request s3 ls s3://static-rust-lang-org/dist/ --recursive" `
+        -RedirectStandardOutput $tmpFile `
+        -NoNewWindow `
+        -Wait
+}
 
 Write-Host "[RIFT] Running rustc_collect_commithashes.py .."
 Start-Process -FilePath "py" `
-    -ArgumentList "$pyScript -i $tmpFile -o $outputFile" `
+    -ArgumentList $pyArgs `
     -NoNewWindow `
     -Wait
 

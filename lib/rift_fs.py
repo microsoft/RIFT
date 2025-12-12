@@ -89,7 +89,7 @@ class RIFTFileSystem:
         self.sql_toolchain_path = os.path.abspath(os.path.join(self.sql_path, SQL_TOOLCHAIN_FOLDER))
         os.makedirs(self.sql_toolchain_path, exist_ok=True)
 
-        self.sql_custom_path = os.path.abspath(os.path.join(self.sql_path, SQL_TOOLCHAIN_FOLDER))
+        self.sql_custom_path = os.path.abspath(os.path.join(self.sql_path, SQL_CUSTOM_FOLDER))
         os.makedirs(self.sql_custom_path, exist_ok=True)
 
         # init idb folder, as well as sub folders to store .idb files in
@@ -162,12 +162,11 @@ class RIFTFileSystem:
             retval =  os.path.abspath(rustup_path)
         return retval
     
-    def get_tc_rlib_folder(self, rustup_path, rustc_version, target):
+    def get_tc_rlib_folder(self, rustup_path, target_compiler, target):
         """Builds path to toolchain folder, where rlib files are located in."""
         path = os.path.join(rustup_path, "toolchains")
-        target_compiler = f"{rustc_version}-{target}"
         path = os.path.join(path, target_compiler)
-        path = os.path.join(path, f"lib/rustlib/{target}/lib")
+        path = os.path.join(path, "lib", "rustlib", target, "lib")
         if not os.path.isdir(path):
             path = None
         return path

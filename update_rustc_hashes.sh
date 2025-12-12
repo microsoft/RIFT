@@ -63,11 +63,26 @@ if [[ ! -d "$tmpDir" ]]; then
     exit 1
 fi
 
-echo "[RIFT] Running AWS command, storing result in $tmpFile"
-aws --no-sign-request s3 ls s3://static-rust-lang-org/dist/ --output text --region us-west-2 > "$tmpFile"
+# Check if we're updating an existing file
+updateMode=false
+pyArgs="-i \"$tmpFile\" -o \"$outputFile\""
+
+if [[ -f "$outputFile" ]]; then
+    updateMode=true
+    echo "[RIFT] Existing rustc_hashes.json found, running in update mode"
+    echo "[RIFT] Running AWS command (non-recursive), storing result in $tmpFile"
+    # Run AWS command without --recursive for update mode
+    aws --no-sign-request s3 ls s3://static-rust-lang-org/dist/ --output text --region us-west-2 > "$tmpFile"
+    pyArgs="$pyArgs --update \"$outputFile\""
+else
+    echo "[RIFT] No existing rustc_hashes.json found, running full collection"
+    echo "[RIFT] Running AWS command (recursive), storing result in $tmpFile"
+    # Run AWS command with --recursive for full collection
+    aws --no-sign-request s3 ls s3://static-rust-lang-org/dist/ --recursive --output text --region us-west-2 > "$tmpFile"
+fi
 
 echo "[RIFT] Running rustc_collect_commithashes.py .."
-python3 "$pyScript" -i "$tmpFile" -o "$outputFile"
+python3 $pyScript $pyArgs
 
 echo "[RIFT] Cleaning up tmp file .."
 if [[ -f "$tmpFile" ]]; then

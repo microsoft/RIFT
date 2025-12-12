@@ -8,29 +8,35 @@ import subprocess
 
 class RIFTCompiler:
 
-    def __init__(self, logger, compile_info, cargo_proj_path):
+    def __init__(self, logger, compile_info, cargo_proj_path, rustc_hashes_path="data/rustc_hashes.json"):
         self.cargo_proj_path = cargo_proj_path
         self.logger = logger
         self.compile_debug = False
         self.rust_version = None
+        self.version_short = None
         self.commithash = compile_info["commithash"]
+        self.hash_short = self.commithash[0:9]
+        self.ts = ""
         self.crates = compile_info["crates"]
         self.arch = compile_info["arch"]
         self.target_triple = compile_info["target_triple"]
-        self.rustc_hashes_path = "data/rustc_hashes.json"
+        self.rustc_hashes_path = rustc_hashes_path
         self.cfg_handler = ConfigHandler(self.cargo_proj_path, self.logger)
         #TODO: Keep this enabled for now
         self.autofix_errors = True
 
     def determine_rust_version(self):
         json_data = utils.read_json(self.rustc_hashes_path)
-        hash_data = json_data["exact_hash_to_version"]
+        hash_data = json_data["rustc_hashes"]
         rust_version_determined = False
         for j in hash_data:
-            commithash = j["commit_hash"]
-            if self.commithash == commithash:
-                self.rust_version = j["rust_version"]
+            commithash = j["git_commit_hash"]
+            hash_short = j["hash_short"]
+            if commithash is None and self.hash_short == hash_short or self.commithash == commithash:
+                self.rust_version = j["version"]
+                self.version_short = j["version_short"]
                 rust_version_determined = True
+                self.ts = j["ts"]
                 self.logger.info(f"Commit Hash = {self.commithash}, RustVersion = {self.rust_version}")
                 break
         return rust_version_determined
@@ -57,7 +63,7 @@ class RIFTCompiler:
         cur_path = os.getcwd()
         os.chdir(self.cargo_proj_path)
         if not self.cfg_handler.init_proj_config():
-            self.logger.error(f"Failed initialzing project configs!")
+            self.logger.error(f"Failed initializing project configs!")
             return False
         crates_info = self.get_crates_info()
         if not self.cfg_handler.insert_crates(crates_info):
@@ -68,7 +74,7 @@ class RIFTCompiler:
         return True
     
     def set_toolchain_config(self):
-        toolchain_info = {"channel": f"\"{self.rust_version}\"", "targets": f"[ \"{self.get_target()}\" ]"}
+        toolchain_info = {"channel": f"\"{self.version_short}\"", "targets": f"[ \"{self.get_target()}\" ]"}
         if not self.cfg_handler.create_toolchain_config(toolchain_info):
             self.logger.error(f"ConfigHandler could not initialize toolchain file!")
             return False
@@ -120,7 +126,7 @@ class RIFTCompiler:
                 resultcode,stdout,stderr = utils.exec_cmd(check_cmd, capture_output=True, check=True)
             except subprocess.CalledProcessError:
                 i += 1
-                self.logger.error(f"CalledProcessError occured for {check_cmd}, skipping crate = {crate}")
+                self.logger.error(f"CalledProcessError occurred for {check_cmd}, skipping crate = {crate}")
                 result["failed_crates"].append(crate)
                 continue
             if resultcode != 0 and self.autofix_errors:
@@ -141,7 +147,7 @@ class RIFTCompiler:
                     resultcode,stdout,stderr = utils.exec_cmd(compile_cmd, capture_output=False, check=True)
                 except subprocess.CalledProcessError:
                     i += 1
-                    self.logger.error(f"CalledProcessError ocurred when trying to compile {crate}, skipping it ..")
+                    self.logger.error(f"CalledProcessError occurred when trying to compile {crate}, skipping it ..")
                     result["failed_crates"].append(crate)
                     continue
                 self.logger.info(f"cmd = {' '.join(compile_cmd)} , resultcode = {resultcode}")
@@ -154,7 +160,7 @@ class RIFTCompiler:
     def get_proj_config(self):
         proj_config = {"arch": self.arch, 
                        "target": self.get_target(), 
-                       "rust_version": self.rust_version, 
+                       "rust_version": self.version_short, 
                        "target_compiler": self.get_target_compiler(), 
                        "proj_path": self.cargo_proj_path, 
                        "compile_type": "release"}
@@ -236,8 +242,8 @@ class RIFTCompiler:
         if code != 0:
             self.logger.error(f"Failed querying added targets!")
             return output
-        output = stdout.split("\n")
-        for target in output:
+        targets = stdout.split("\n")
+        for target in targets:
             if "(installed)" in target:
                 target = target.split(" ")[0]
                 output.append(target)
@@ -265,7 +271,10 @@ class RIFTCompiler:
 
     def get_target_compiler(self):
         """Generate the target compiler by concatenating rustc version, arch and target_triple. Returns target compiler as string"""
-        return f"{self.rust_version}-{self.arch}-{self.target_triple}"
+        if "nightly" in self.rust_version:
+            return f"nightly-{self.ts}-{self.arch}-{self.target_triple}"
+        else:
+            return f"{self.version_short}-{self.arch}-{self.target_triple}"
     
     def get_crates_info(self):
         """"Helper function transforming the crates list to a dictionary ready to insert into toml file."""

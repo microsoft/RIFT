@@ -37,7 +37,7 @@ class ConfigHandler():
             self.cfg_proj = configparser.ConfigParser()
             self.cfg_proj.read(self.cargo_proj_path)
         else:
-            self.logger.error(f"Config.toml = {self.cargo_proj_path} does not exit yet!")
+            self.logger.error(f"Config.toml = {self.cargo_proj_path} does not exist yet!")
             return False
         return True
 
@@ -48,10 +48,10 @@ class ConfigHandler():
 
         self.cfg_cargo = configparser.ConfigParser()
         if os.path.isfile(self.cfg_toml_path):
-            self.cfg_cargo = self.cfg_cargo.read(self.cfg_toml_path)
+            self.cfg_cargo.read(self.cfg_toml_path)
 
         build_section = "build"
-        if build_section not in self.cfg_proj.sections():
+        if build_section not in self.cfg_cargo.sections():
             self.cfg_cargo.add_section(build_section)
             self.logger.info(f"Added section '{build_section}' to {self.cfg_toml_path}")
         
@@ -99,11 +99,11 @@ class ConfigHandler():
         
         self.cfg_tc = configparser.ConfigParser()
         if os.path.isfile(self.tc_toml_path):
-            self.cfg_tc = self.cfg_tc.read(self.tc_toml_path)
+            self.cfg_tc.read(self.tc_toml_path)
         toolchain_section = "toolchain"
         if toolchain_section not in self.cfg_tc.sections():
             self.cfg_tc.add_section(toolchain_section)
-            self.logger.debug(f"Added section 'toolchain to {self.tc_toml_path}")
+            self.logger.debug(f"Added section toolchain to {self.tc_toml_path}")
         
         for key in toolchain_data.keys():
             val = toolchain_data[key]
@@ -119,7 +119,7 @@ class ConfigHandler():
         return self.cfg_proj["dependencies"][crate]
     
     def update_crate(self, crate, val):
-        """Updates the version for the specific create."""
+        """Updates the version for the specific crate."""
         self.cfg_proj.read(self.cargo_proj_path)
         self.cfg_proj["dependencies"][crate] = val
         self.logger.info(f"Updated crate {crate} = {val}")

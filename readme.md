@@ -35,6 +35,7 @@ In order to use the whole toolsuite, the following dependencies need to be insta
 * Python requirements via: `py -m pip install -r requirements.txt`
 * You will have to install Ida, download Diaphora(https://github.com/joxeankoret/diaphora) and FLAIR tools (https://docs.hex-rays.com/user-guide/helper-tools)
 * Furthermore, you will also need to adjust the rift_config.cfg. You need to set the paths to the corresponding tools
+* In case you plan to use the `ida_apply_flirt_from_folder.py` script on Linux, you will need to install `python3-tk` via `sudo apt install python3-tk`
 
 ## Updating Commithash JSON File
 
