@@ -18,6 +18,8 @@ RE_NO_MATCHING_PACKAGE = r"error: no matching package named `(.*)` found"
 RE_WRONG_EDITION = r"\s+The package requires the Cargo feature called `(.{1,100})`, but that feature is not stabilized in this version of Cargo"
 # error case: Wrong edition is set
 RE_WRONG_EDITION2 = r"\s+this version of Cargo is older than the `(.{1,100})` edition"
+# error case: There are multiple versions of a package
+RE_MULTI_PKG_VERSIONS = r"error: There are multiple `(.*)` packages in your project, and the specification `(.*)` is ambiguous.*"
 
 class ErrorParser():
 
@@ -97,6 +99,13 @@ class ErrorParser():
             m = re.match(RE_WRONG_EDITION2, line)
             if m:
                 retval["error"] = "WRONG_EDITION2"
+                retval["entity"] = m.group(1)
+                break
+
+            # error 8: Multiple versions of a package found
+            m = re.match(RE_MULTI_PKG_VERSIONS, line)
+            if m:
+                retval["error"] = "MULTI_PKG_VERSIONS"
                 retval["entity"] = m.group(1)
                 break
 

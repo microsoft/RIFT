@@ -6,6 +6,11 @@ import re
 import os
 import subprocess
 
+class AutoFixRetCode:
+    SUCCESS = 0
+    FAILED = 1
+    KEEP_CMDS = 2
+
 class RIFTCompiler:
 
     def __init__(self, logger, compile_info, cargo_proj_path, rustc_hashes_path="data/rustc_hashes.json"):
@@ -110,13 +115,21 @@ class RIFTCompiler:
         check_templ.append("--package")
         compile_templ.append("--package")
         err_parser = ErrorParser(self.logger)
+        keep_compile_cmd = False
         while i < len(target_crates):
 
             crate = target_crates[i]
-            check_cmd = copy(check_templ)
-            check_cmd.append(crate)
-            compile_cmd = copy(compile_templ)
-            compile_cmd.append(crate)
+
+            # Keep the checking and compiling commands if the keep_compile_cmd flag is True.
+            # Otherwise, rebuild them.
+            if not keep_compile_cmd:
+                check_cmd = copy(check_templ)
+                check_cmd.append(crate)
+                compile_cmd = copy(compile_templ)
+                compile_cmd.append(crate)
+            else:
+                keep_compile_cmd = False
+
             resultcode = 1
             stdout = None
             stderr = None
@@ -130,10 +143,15 @@ class RIFTCompiler:
                 result["failed_crates"].append(crate)
                 continue
             if resultcode != 0 and self.autofix_errors:
-                fix_success = self.__fix_error(stderr, err_parser)
+                fix_ret_code = self.__fix_error(stderr, err_parser, check_cmd, compile_cmd)
                 # We succeeded in fixing the issue? Try again!
-                if fix_success:
+                if fix_ret_code != AutoFixRetCode.FAILED:
                     self.logger.info(f"Error fixed! Trying to check if {crate} is compilable again ..")
+
+                    # For auto-fix handler MULTI_PKG_VERSIONS
+                    # Keep the commands until the next loop for recompilation after the auto-fix
+                    if fix_ret_code == AutoFixRetCode.KEEP_CMDS:
+                        keep_compile_cmd = True
                     continue
                 else:
                     self.logger.info(f"Autofix failed for crate = {crate}, try fixing issue manually. Skipping the crate")
@@ -167,19 +185,19 @@ class RIFTCompiler:
         return proj_config
 
 
-    def __fix_error(self, stderr, err_parser):
+    def __fix_error(self, stderr, err_parser, check_cmd, compile_cmd):
         """If autofix is enabled, try to fix errors in the Cargo.toml file."""
         err = err_parser.parse_error_msg(stderr)
         self.logger.debug(err)
         error_code = err["error"]
         entity = err["entity"]
         entity_meta = err["entity_meta"]
-        is_success = True
+        ret_code = AutoFixRetCode.SUCCESS
 
         if error_code == "UNKNOWN_ERROR":
 
             self.logger.info(f"Unknown error occurred!")
-            is_success = False
+            ret_code = AutoFixRetCode.FAILED
 
         elif error_code in ["INVALID_VERSION", "INVALID_VERSION_FOR_REQ_P"]:
 
@@ -197,7 +215,7 @@ class RIFTCompiler:
                 self.downgrade_crate(entity, entity_meta, new_version)
             except subprocess.CalledProcessError:
                 self.logger.warning(f"Failed downgrading crate = {entity}, autofix failed!")
-                is_success = False
+                ret_code = AutoFixRetCode.FAILED
 
         elif error_code == "INVALID_CRATE" or error_code == "SYNTAX_ERROR_CRATE":
 
@@ -214,7 +232,44 @@ class RIFTCompiler:
             self.logger.info(f"Wrong edition = {entity} set, downgrading edition ..")
             self.cfg_handler.downgrade_edition()
 
-        return is_success
+        elif error_code == "MULTI_PKG_VERSIONS":
+
+            self.logger.info(f"Found multiple versions of {entity}")
+            ret_code = self.add_version_to_crate(entity, check_cmd, compile_cmd)
+            if ret_code == AutoFixRetCode.FAILED:
+                self.logger.info(f"Couldn't get the version of {entity}.")
+            else:
+                self.logger.info(f"Using {compile_cmd[-1]} for compilation.")
+
+        return ret_code
+
+    def add_version_to_crate(self, crate_name, check_cmd, compile_cmd):
+        """
+        Convert just a package name to pkgname@version like hex@0.4.3
+        """
+        ret_code = AutoFixRetCode.FAILED
+        crates_info = self.get_crates_info()
+        if crate_name in crates_info and crate_name == compile_cmd[-1]:
+
+            crate = compile_cmd.pop()
+            # remove '"=' at the begging and '"' at the end
+            # e.g. converting "=0.4.3" to 0.4.3
+            m = re.match(r"\"=(\d+(\.\d+)*.*)\"", crates_info[crate])
+
+            if m:
+                # add version to crate
+                version = m.group(1)
+                crate += "@" + version
+
+                # add crate to commands
+                compile_cmd.append(crate)
+                _ = check_cmd.pop()
+                check_cmd.append(crate)
+
+                # this ret code avoid rebuilding commands for the next loop
+                ret_code = AutoFixRetCode.KEEP_CMDS
+
+        return ret_code
 
     def downgrade_crate(self, crate, old_ver, new_ver):
         """Downgrade a specific crate via cargo"""
