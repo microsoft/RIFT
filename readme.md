@@ -159,6 +159,8 @@ The server binds to the IP and port configured in `rift_config.cfg` under `[Rift
 
 ### IDA Pro Integration
 
+![image](screenshots/idaplugin1.png)
+
 The RIFT IDA Pro plugin allows FLIRT signatures to be generated and optionally applied directly from within an active reverse engineering session, without leaving IDA Pro.
 
 #### Prerequisites
