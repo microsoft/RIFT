@@ -12,7 +12,7 @@
 
 RIFT (Rust Interactive Function Tool) is a toolsuite to assist reverse engineers in identifying library code in rust malware. It is a research project developed by the MIRAGE Team, explores library recognition techniques conducted on rust binaries and was presented at RECON 2025.
 
-This branch is an updated version, supporting only FLIRT signature generation. For the original version presented at RECON 2025 and also supports BinaryDiffing, see the version_1_stable build.
+This branch is an updated version, supporting only FLIRT signature generation. For the original version presented at RECON 2025 and also supports BinaryDiffing, see the version_1_stable(https://github.com/microsoft/RIFT/tree/version_1_stable) build.
 
 
 
