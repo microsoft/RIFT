@@ -1,0 +1,9 @@
+{
+    "commithash": "16d2276fa6fccb0cc239a542d4c3f0eb46f660ec",
+    "target_triple": "pc-windows-msvc",
+    "arch": "i686",
+    "crates": [
+        "rustc-demangle-0.1.24"
+    ],
+	"filetype": "PE"
+}

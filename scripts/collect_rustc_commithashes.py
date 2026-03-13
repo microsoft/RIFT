@@ -23,30 +23,19 @@ def parse_line(line):
     """Parse AWS S3 listing line to extract timestamp, date, and path.
 
     Args:
-        line: String in format "YYYY-MM-DD HH:MM:SS filesize dist/YYYY-MM-DD/filename" (recursive)
-               or "PRE YYYY-MM-DD/" (non-recursive, folder listing)
+        line: String in format "YYYY-MM-DD HH:MM:SS filesize dist/YYYY-MM-DD/filename"
 
     Returns:
         tuple: (stored_ts, ts, path) or None if parsing fails
-        For non-recursive PRE entries, returns ('folder', date, None) to indicate folder
     """
-    # Try recursive format first: "YYYY-MM-DD HH:MM:SS filesize dist/YYYY-MM-DD/filename"
-    pattern_recursive = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+\d+\s+(dist\/(\d{4}-\d{2}-\d{2})\/.+)$'
-    match = re.match(pattern_recursive, line)
+    pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+\d+\s+(dist\/(\d{4}-\d{2}-\d{2})\/.+)$'
+    match = re.match(pattern, line)
 
     if match:
         stored_ts = match.group(1)  # "2024-10-16 18:15:30"
         path = match.group(2)        # "dist/2024-10-17/channel-rust-nightly.toml"
         ts = match.group(3)          # "2024-10-17"
         return stored_ts, ts, path
-
-    # Try non-recursive format: "PRE YYYY-MM-DD/"
-    pattern_nonrecursive = r'^\s*PRE\s+(\d{4}-\d{2}-\d{2})\/$'
-    match = re.match(pattern_nonrecursive, line)
-
-    if match:
-        ts = match.group(1)  # "2024-10-17"
-        return 'folder', ts, None
 
     return None
 
@@ -157,51 +146,14 @@ def main(args):
     # Iterate through each entry
     for line in lines:
         line = line.strip("\n")
+        if not line.endswith(".toml"):
+            continue
         parsed = parse_line(line)
         if parsed is None:
             continue
-
-        stored_ts, ts, path = parsed
-
-        # Handle folder entries (non-recursive format)
-        if stored_ts == 'folder':
-            # For folder entries, we need to construct URLs for the TOML files
-            # Try common channel files: nightly, beta, stable
-            for channel in ['nightly', 'beta', 'stable']:
-                channel_name = f"channel-rust-{channel}.toml"
-                full_path = f"dist/{ts}/{channel_name}"
-                url = f"{AWS_URL}{full_path}"
-
-                # For update mode, use current timestamp for folder entries
-                folder_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                if update_running and not is_new_entry(last_update_ts, folder_ts):
-                    continue
-
-                result = extract_rustc_information(url)
-                if result is None:
-                    # It's okay if not all channels exist for a given date
-                    continue
-                version, git_commit_hash, hash_short = result
-
-                # Extract version_short (version without parenthesis content)
-                version_short = version.split('(')[0].strip() if '(' in version else version
-
-                json_output["rustc_hashes"].append({"url": url,
-                                                    "stored_ts": folder_ts,
-                                                    "ts": ts,
-                                                    "version": version,
-                                                    "version_short": version_short,
-                                                    "git_commit_hash": git_commit_hash,
-                                                    "hash_short": hash_short,
-                                                    "channel_name": channel_name})
-                logger.info(f"Processed {url}\tversion = {version}")
-            continue
-
-        # Handle file entries (recursive format)
-        if not line.endswith(".toml"):
-            continue
-
+        
         # If the update mode is running, check if its a new entry
+        stored_ts, ts, path = parsed
         if update_running and not is_new_entry(last_update_ts, stored_ts):
             continue
 

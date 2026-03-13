@@ -7,10 +7,12 @@ import os
 
 
 def apply_flirt(f):
+    """Apply FLIRT signature file. Args: f (str): Path to .sig file. Returns: None."""
     ida_funcs.plan_to_apply_idasgn(f)
 
 
 def select_folder():
+    """Open folder selection dialog. Args: None. Returns: str: Selected folder path or empty string."""
     root = tk.Tk()
     root.withdraw()
     folder_path = filedialog.askdirectory(title="Select a folder")

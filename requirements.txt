@@ -1,4 +1,4 @@
-pandas==2.3.0
-ar==1.0.0
-rust_demangler==1.0
-Requests==2.32.4
+ar==1.0.1
+lief==0.17.5
+PySide6==6.10.2
+Requests==2.32.5
