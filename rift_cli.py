@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from librift.utils import get_logger, parse_crate_string
 from librift.rift_meta import build_rustmeta_from_string, build_rustmeta_from_json
-from rift_engine import RiftEngine
+from rift_engine import RiftEngine, RiftEngineError
 
 logger = None
 
@@ -73,7 +73,7 @@ def handle_gen_mode(cfg_path, output_path, compiler="", crate=""):
             api.generate_compiler_flirt(meta, output_path)
             logger.info("Compiler FLIRT signature generated successfully")
             return 0
-        except Exception as e:
+        except RiftEngineError as e:
             logger.error(f"Failed to generate compiler FLIRT: {e}")
             return 1
     else:

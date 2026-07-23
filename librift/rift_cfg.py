@@ -69,6 +69,9 @@ class RiftConfig:
             # Expand %VAR%, $VAR, ~ and make absolute
             expanded = os.path.expanduser(os.path.expandvars(p))
             if allow_command and not os.path.dirname(expanded) and not os.path.isabs(expanded):
+                config_relative = os.path.join(config_dir, expanded)
+                if os.path.isfile(config_relative):
+                    return os.path.abspath(config_relative)
                 return expanded
             if not os.path.isabs(expanded):
                 expanded = os.path.join(config_dir, expanded)

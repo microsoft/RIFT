@@ -38,7 +38,12 @@ class RiftIdaCore:
         rustc_hashes_path = os.path.join(self.ess_path, "rustc_hashes.json")
         cfg_path = os.path.join(self.ess_path, "rift_config.cfg")
         self.rift_cfg = RiftConfig(self.logger, cfg_path, rustc_hashes=rustc_hashes_path)
-        if self.rift_cfg.api_ip == "NOT_SET" or self.rift_cfg.api_port == "NOT_SET":
+        if (
+            not self.rift_cfg.api_ip
+            or self.rift_cfg.api_ip == "NOT_SET"
+            or not self.rift_cfg.api_port
+            or self.rift_cfg.api_port == "NOT_SET"
+        ):
             self.logger.warning("RIFT Server IP and Port are not set, server mode will not be available!")
         self.rift_meta = RiftMeta(self.logger, self.rift_cfg)
         self.logger.info(f"Initialized RiftIdaCore!\nCfgPath = {cfg_path}\nHashesPath = {rustc_hashes_path}")

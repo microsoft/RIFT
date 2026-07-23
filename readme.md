@@ -48,7 +48,7 @@ This branch is an updated version, supporting only FLIRT signature generation. F
 4. Place Ida Pro utilities (`pcf`, `sigmake`) and `strings.exe` from preferably SysInternals Suite in the `bin/` directory
 5. Configure `rift_config.cfg` with correct paths
 
-For macOS with IDA Pro 9.3 or later, follow the [macOS and IDA setup guide](docs/macos-ida.md). It uses a dedicated RIFT runtime so RIFT's Qt packages do not replace IDA's bundled Qt libraries.
+For macOS with IDA Pro 9.3 or later, follow the [macOS and IDA setup guide](docs/macos-ida.md) instead of the platform-specific installation steps above. It uses a dedicated RIFT runtime so RIFT's Qt packages do not replace IDA's bundled Qt libraries.
 
 Furthermore, RIFT depends on `data/rustc_hashes.json` to determine the Rust version of the corresponding commit hash. This file should be updated regularly.
 
