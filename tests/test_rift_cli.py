@@ -75,7 +75,7 @@ class TestHandleGenMode(unittest.TestCase):
             )
 
             # Assertions
-            self.assertEqual(result, 1, "Function should return 1 for success")
+            self.assertEqual(result, 0, "Function should return 0 for success")
             MockRiftEngine.assert_called_once_with(rift_cli.logger, self.cfg_path, output_folder=output_path)
             mock_build_meta.assert_called_once_with(compiler)
             mock_parse_crate.assert_called_once_with(crate)
@@ -102,7 +102,7 @@ class TestHandleGenMode(unittest.TestCase):
             )
 
             # Assertions
-            self.assertEqual(result, 0, "Function should return 0 for failure")
+            self.assertEqual(result, 1, "Function should return 1 for failure")
             mock_logger.error.assert_called_with(
                 "Providing only the crate and not the compiler is not supported yet!"
             )
@@ -136,7 +136,7 @@ class TestHandleGenMode(unittest.TestCase):
             )
 
             # Assertions
-            self.assertEqual(result, 1, "Function should return 1 for success")
+            self.assertEqual(result, 0, "Function should return 0 for success")
             MockRiftEngine.assert_called_once_with(rift_cli.logger, self.cfg_path, output_folder=output_path)
             mock_build_meta.assert_called_once_with(compiler)
             mock_api_instance.generate_compiler_flirt.assert_called_once_with(mock_meta, output_path)

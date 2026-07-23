@@ -24,7 +24,9 @@ ENV_STRINGS = {
 }
 
 RE_RUSTLIB_PATTERN = r".{1,250}[\\|\/](.{1,50}-\d+\.\d+.\d+(-.{1,20})?)[\\|\/].{1,100}\.rs"
-RE_COMMITHASH_PATTERN = r".{1,250}rustc[\\|\/]([0-9a-zA-Z]{40})[\\|\/]"
+# IDA may expose the compiler path as `/rustc/<hash>/...`, so the prefix is
+# optional. Keep the bounded prefix for embedded paths in longer strings.
+RE_COMMITHASH_PATTERN = r".{0,250}rustc[\\|\/]([0-9a-zA-Z]{40})[\\|\/]"
 
 # NOTE: Hardcoded check in compiler pattern if ends with -gnu or -msvc
 RE_COMPILER_PATTERN = r"(.{1,70})\-(aarch64|arm64ec|armv5te|armv7a?|armv8r|i[56]86|loongarch64|nvptx64|powerpc64le|powerpc64|powerpc|riscv32i|riscv32im|riscv32imafc|riscv32imac|riscv32imc|riscv64a23|riscv64gc|riscv64imac|s390x|sparc64|sparcv9|thumbv6m|thumbv7em|thumbv7m|thumbv7neon|thumbv8m\.base|thumbv8m\.main|wasm32v1|wasm32|x86_64|arm)\-(.{1,70}(-msvc|-gnu|-uefi))"
