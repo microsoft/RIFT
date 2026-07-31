@@ -1,19 +1,43 @@
 import sys
 import json
 import time
+import ssl
 import urllib.request
+import urllib.parse
 import urllib.error
 from typing import Dict, Any, Optional, Callable
+import shutil
 
 DEFAULT_SERVER = "http://localhost:5001"
 DEFAULT_POLL_INTERVAL = 10
+DEFAULT_TIMEOUT = 300
 
 class RiftConnector:
     """Client connector for RIFT server API. Portable to other applications."""
 
-    def __init__(self, server_url: str = DEFAULT_SERVER, poll_interval: int = DEFAULT_POLL_INTERVAL):
+    def __init__(self, server_url: str = DEFAULT_SERVER, poll_interval: int = DEFAULT_POLL_INTERVAL, api_key = None, ca_cert_path = None, insecure_skip_verify = False):
         self.server_url = server_url.rstrip("/")
         self.poll_interval = poll_interval
+        self.api_key = api_key
+        self.ca_cert_path = ca_cert_path
+        self.insecure_skip_verify = insecure_skip_verify
+
+        if self.ca_cert_path:
+            self.ctx = ssl.create_default_context(cafile=self.ca_cert_path)
+        elif self.insecure_skip_verify:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            self.ctx = ctx
+        else:
+            self.ctx = None
+
+    def _headers(self, extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        """Build request headers, attaching the API key when configured."""
+        headers = dict(extra or {})
+        if self.api_key:
+            headers["X-RIFT-API-KEY"] = self.api_key
+        return headers
 
     def _send_post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Send a POST request with JSON data."""
@@ -21,26 +45,52 @@ class RiftConnector:
         req = urllib.request.Request(
             url,
             data=json.dumps(data).encode(),
-            headers={"Content-Type": "application/json"}
+            headers=self._headers({"Content-Type": "application/json"})
         )
         try:
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, context=self.ctx, timeout=DEFAULT_TIMEOUT) as response:
                 return json.loads(response.read().decode())
         except urllib.error.HTTPError as e:
             return {"error": e.reason, "status_code": e.code}
         except urllib.error.URLError as e:
             return {"error": str(e.reason)}
+        except Exception as e:
+            return {"error": str(e)}
 
     def _send_get(self, endpoint: str) -> Dict[str, Any]:
         """Send a GET request."""
         url = f"{self.server_url}{endpoint}"
+        req = urllib.request.Request(url, headers=self._headers())
         try:
-            with urllib.request.urlopen(url) as response:
+            with urllib.request.urlopen(req, context=self.ctx, timeout=DEFAULT_TIMEOUT) as response:
                 return json.loads(response.read().decode())
         except urllib.error.HTTPError as e:
             return {"error": e.reason, "status_code": e.code}
         except urllib.error.URLError as e:
             return {"error": str(e.reason)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def download_flirt(self, filename: str, mode: str, dest_path: str):
+        """Download a FLIRT signature. mode='local' returns the server's JSON path report;
+        mode='remote' streams the signature bytes to dest_path and returns dest_path."""
+        query = urllib.parse.urlencode({"filename": filename, "mode": mode})
+        url = f"{self.server_url}/download?{query}"
+        req = urllib.request.Request(url, headers=self._headers())
+        try:
+            with urllib.request.urlopen(req, context=self.ctx, timeout=DEFAULT_TIMEOUT) as response:
+                if mode == "local":
+                    return json.loads(response.read().decode())
+                else:
+                    with open(dest_path, "wb") as f:
+                        shutil.copyfileobj(response, f)
+                    return dest_path
+        except urllib.error.HTTPError as e:
+            return {"error": e.reason, "status_code": e.code}
+        except urllib.error.URLError as e:
+            return {"error": str(e.reason)}
+        except Exception as e:
+            return {"error": str(e)}
 
     def submit_job(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Submit a FLIRT generation job. Returns response with job_id."""
