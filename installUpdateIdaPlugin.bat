@@ -2,7 +2,7 @@
 REM Usual path C:\Users\[USER]\AppData\Roaming\Hex-Rays\IDA Pro\plugins
 
 if "%~1"=="" (
-    echo [installUpdateIdaPlugin] No path to plugin dir provided! Usually \"%USERPROFILE%\AppData\Roaming\Hex-Rays\IDA Pro\plugin\"
+    echo [installUpdateIdaPlugin] No path to plugin dir provided! Usually \"%USERPROFILE%\AppData\Roaming\Hex-Rays\IDA Pro\plugins\"
     exit /b 1
 )
 
