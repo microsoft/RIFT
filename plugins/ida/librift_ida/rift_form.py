@@ -196,10 +196,10 @@ class RiftIdaForm(idaapi.PluginForm):
         self.enable_cb = QtWidgets.QCheckBox("Enable Server")
         self.enable_cb.setChecked(False)
         self.enable_cb.stateChanged.connect(self.onEnableServerChanged)
-        self.silent_cb = QtWidgets.QCheckBox("Apply FLIRT silently (Not supported yet)") 
-        self.silent_cb.setChecked(False) 
-        servers_opts_layout.addWidget(self.status_server, 1) 
-        servers_opts_layout.addWidget(self.enable_cb, 1) 
+        self.silent_cb = QtWidgets.QCheckBox("Apply FLIRT silently")
+        self.silent_cb.setChecked(True)
+        servers_opts_layout.addWidget(self.status_server, 1)
+        servers_opts_layout.addWidget(self.enable_cb, 1)
         servers_opts_layout.addWidget(self.silent_cb, 1)
 
         # Compiler options
@@ -224,7 +224,6 @@ class RiftIdaForm(idaapi.PluginForm):
             name_item.setFlags(name_item.flags() & ~QtCore.Qt.ItemIsEditable)
             self.crates_table.setItem(row, 0, name_item)
 
-            # TODO: Version should be editable
             ver_item = QtWidgets.QTableWidgetItem(crate.version)
             ver_item.setFlags(ver_item.flags() | QtCore.Qt.ItemIsEditable)
             self.crates_table.setItem(row, 1, ver_item)
@@ -335,7 +334,7 @@ class RiftIdaForm(idaapi.PluginForm):
             if not self.relmode_box.isChecked():
                 debug_build = False
             # apply silent hardcoded to False for now
-            self.rift_controller.start_apply(folder, self.__get_rustmeta(), parent_widget=None, apply_silent=False, debug_build=debug_build)
+            self.rift_controller.start_apply(folder, self.__get_rustmeta(), parent_widget=None, apply_silent=self.silent_cb.isChecked(), debug_build=debug_build)
         
         return 1
       
@@ -428,7 +427,18 @@ class RiftIdaForm(idaapi.PluginForm):
     
     def __get_rustmeta(self):
         """Return the active RustMetadata, building it from custom form values if custom mode is on."""
+        # Collect only rows whose "Apply FLIRT" checkbox is checked. This must apply
+        # regardless of custom-values mode, since the checkboxes are editable either way.
+        crates = []
+        for row in range(self.crates_table.rowCount()):
+            flirt_item = self.crates_table.item(row, 2)
+            if flirt_item and flirt_item.checkState() == QtCore.Qt.Checked:
+                name = self.crates_table.item(row, 0).text()
+                version = self.crates_table.item(row, 1).text()
+                crates.append(f"{name}-{version}")
+
         if not self.use_custom_fields.isChecked():
+            self.rustmeta.crates = set(crates)
             return self.rustmeta
 
         commithash = self.commithash_edit.text().strip()
@@ -446,15 +456,6 @@ class RiftIdaForm(idaapi.PluginForm):
             rust_version = channel_text
             version_short = channel_text
             ts = None
-
-        # Collect only rows whose "Apply FLIRT" checkbox is checked
-        crates = []
-        for row in range(self.crates_table.rowCount()):
-            flirt_item = self.crates_table.item(row, 2)
-            if flirt_item and flirt_item.checkState() == QtCore.Qt.Checked:
-                name = self.crates_table.item(row, 0).text()
-                version = self.crates_table.item(row, 1).text()
-                crates.append(f"{name}-{version}")
 
         meta = RustMetadata(
             commithash=commithash,

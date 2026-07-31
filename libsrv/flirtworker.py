@@ -11,14 +11,16 @@ from librift.rustmeta import RustMetadata
 class FlirtWorker:
     """Background worker that processes FLIRT jobs sequentially."""
 
-    def __init__(self, job_registry: JobRegistry, rift_api, output_folder: str, logger):
+    def __init__(self, job_registry: JobRegistry, rift_api, output_folder: str, logger, storage=None, is_remote=False):
         self._registry = job_registry
         self._rift_api = rift_api
         self._output_folder = output_folder
         self._logger = logger
+        self._storage = storage
         self._queue: queue.Queue[Optional[str]] = queue.Queue()
         self._shutdown_event = threading.Event()
         self._worker_thread: Optional[threading.Thread] = None
+        self.is_remote = is_remote
 
     def start(self):
         """Start the worker thread."""
@@ -133,6 +135,8 @@ class FlirtWorker:
         compiler_sig = self._rift_api.generate_compiler_flirt(rust_meta, self._output_folder)
         if compiler_sig:
             result_files.append(str(compiler_sig))
+            if self._storage and self.is_remote:
+                self._storage.register(str(compiler_sig), job_id=job.job_id)
 
         # Generate crates FLIRT with progress updates
         crates = rust_meta.get_crates()
@@ -145,6 +149,8 @@ class FlirtWorker:
                 crate_sig = self._rift_api.generate_crate_flirt(rust_meta, crate, self._output_folder, debug_build=json_data.get("debug_build", False))
                 if crate_sig:
                     result_files.append(str(crate_sig))
+                    if self._storage and self.is_remote:
+                        self._storage.register(str(crate_sig), job_id=job.job_id)
             except Exception as e:
                 self._logger.warning(f"Failed to generate FLIRT for {crate.get_id()}: {e}")
 

@@ -4,6 +4,10 @@ import shutil
 from typing import Optional, Dict, Any
 from librift.utils import read_json
 
+class RiftConfigError(Exception):
+    """FLIRT generation errors."""
+    pass
+
 
 class RiftConfig:
     def __init__(
@@ -20,6 +24,12 @@ class RiftConfig:
         rustc_hashes: Optional[str] = None,
         api_ip: Optional[str] = None,
         api_port: Optional[str] = None,
+        server_storage: Optional[str] = None,
+        server_mode: Optional[str] = None,
+        api_key: Optional[str] = None,
+        tls_cert: Optional[str] = None,
+        tls_key: Optional[str] = None,
+        tls_ca_cert: Optional[str] = None,
     ):
         self.logger = logger
         self.config_path = config_path
@@ -37,6 +47,12 @@ class RiftConfig:
         self.strings: Optional[str] = None
         self.api_ip: Optional[str] = None
         self.api_port: Optional[str] = None
+        self.server_storage: Optional[str] = None
+        self.server_mode: Optional[str] = None
+        self.api_key: Optional[str] = None
+        self.tls_cert: Optional[str] = None
+        self.tls_key: Optional[str] = None
+        self.tls_ca_cert: Optional[str] = None
 
         config = configparser.ConfigParser()
         read_files = config.read(self.config_path)
@@ -86,6 +102,12 @@ class RiftConfig:
         cfg_rustc_hashes      = _cfg_get("Default", "RustcHashes")
         cfg_api_ip            = _cfg_get("RiftServer", "Ip")
         cfg_api_port          = _cfg_get("RiftServer", "Port")
+        cfg_server_storage    = _cfg_get("RiftServer", "flirt_dir")
+        cfg_server_mode       = _cfg_get("RiftServer", "server_mode")
+        cfg_api_key           = _cfg_get("RiftServer", "ApiKey")
+        cfg_tls_cert          = _cfg_get("RiftServer", "TlsCert")
+        cfg_tls_key           = _cfg_get("RiftServer", "TlsKey")
+        cfg_tls_ca_cert       = _cfg_get("RiftServer", "TlsCaCert")
 
         # ---- resolve with overrides
         self.work_folder       = _norm_path(_resolve(work_folder,       cfg_work_folder))
@@ -96,6 +118,12 @@ class RiftConfig:
         rustc_hashes_path      = _norm_path(_resolve(rustc_hashes,      cfg_rustc_hashes, default="NOT_SET"))
         self.api_ip            = _resolve(api_ip,                        cfg_api_ip)
         self.api_port          = _resolve(api_port,                      cfg_api_port)
+        self.server_storage    = _norm_path(_resolve(server_storage,    cfg_server_storage))
+        self.server_mode       = _resolve(server_mode,                   cfg_server_mode)
+        self.api_key           = _resolve(api_key,                       cfg_api_key)
+        self.tls_cert          = _norm_path(_resolve(tls_cert,          cfg_tls_cert))
+        self.tls_key           = _norm_path(_resolve(tls_key,           cfg_tls_key))
+        self.tls_ca_cert       = _norm_path(_resolve(tls_ca_cert,       cfg_tls_ca_cert))
 
         # Always convert rustc_hashes_path into a dict via read_json()
         self._load_rustc_hashes(rustc_hashes_path)
@@ -137,10 +165,10 @@ class RiftConfig:
 
     def _validate_and_finalize(self) -> None:
         if not self.work_folder or not os.path.isdir(self.work_folder):
-            raise FileNotFoundError(f"{self.work_folder} does not exist. Set a valid work folder.")
+            raise RiftConfigError(f"{self.work_folder} does not exist. Set a valid work folder.")
 
         if not self.cargo_proj_folder or not os.path.isdir(self.cargo_proj_folder):
-            raise FileNotFoundError(f"{self.cargo_proj_folder} does not exist. Set a valid tmp folder.")
+            raise RiftConfigError(f"{self.cargo_proj_folder} does not exist. Set a valid tmp folder.")
 
         if not self.pcf or self.pcf == "NOT_SET" or not os.path.isfile(self.pcf):
             self.logger.warning(
@@ -164,3 +192,61 @@ class RiftConfig:
 
         if not self.api_ip or self.api_ip == "NOT_SET":
             self.logger.warning("API IP address is not set in config file or overrides!")
+
+        if not self.server_storage or self.server_storage == "NOT_SET" or not os.path.isdir(self.server_storage):
+            self.logger.warning(
+                f"flirt_dir = {self.server_storage} does not exist. RIFT server storage features will be unavailable."
+            )
+
+        if self.server_mode not in ("local", "remote"):
+            self.logger.warning(
+                f"mode = {self.server_mode} is not valid (expected 'local' or 'remote'). Defaulting to 'local'."
+            )
+            self.server_mode = "local"
+
+        if self.server_mode == "remote":
+            self.logger.warning(
+                "server_mode=remote: RIFT server will accept connections from the network. "
+                "ApiKey authentication and a full TLS certificate chain (TlsCert, TlsKey, TlsCaCert) "
+                "are required to avoid exposing the server to unauthorized access or plaintext traffic."
+            )
+
+            missing_remote_settings = []
+
+            if not self.api_key or self.api_key == "NOT_SET":
+                self.logger.warning(
+                    "server_mode=remote but ApiKey is not set. Without an API key, any client that "
+                    "can reach this server will be able to submit requests. Set 'ApiKey' under the "
+                    "[RiftServer] section of the config."
+                )
+                missing_remote_settings.append("ApiKey is not set")
+
+            if not self.tls_cert or self.tls_cert == "NOT_SET" or not os.path.isfile(self.tls_cert):
+                self.logger.warning(
+                    f"server_mode=remote but TlsCert = {self.tls_cert} is not set or does not exist. "
+                    "Without a valid TLS certificate the server cannot serve HTTPS. Set 'TlsCert' "
+                    "under the [RiftServer] section of the config."
+                )
+                missing_remote_settings.append("TlsCert is missing or invalid")
+
+            if not self.tls_key or self.tls_key == "NOT_SET" or not os.path.isfile(self.tls_key):
+                self.logger.warning(
+                    f"server_mode=remote but TlsKey = {self.tls_key} is not set or does not exist. "
+                    "Without a valid TLS private key the server cannot serve HTTPS. Set 'TlsKey' "
+                    "under the [RiftServer] section of the config."
+                )
+                missing_remote_settings.append("TlsKey is missing or invalid")
+
+            if not self.tls_ca_cert or self.tls_ca_cert == "NOT_SET" or not os.path.isfile(self.tls_ca_cert):
+                self.logger.warning(
+                    f"server_mode=remote but TlsCaCert = {self.tls_ca_cert} is not set or does not exist. "
+                    "Clients will not be able to validate the server's certificate chain. Set "
+                    "'TlsCaCert' under the [RiftServer] section of the config."
+                )
+                missing_remote_settings.append("TlsCaCert is missing or invalid")
+
+            if missing_remote_settings:
+                raise RiftConfigError(
+                    "server_mode=remote is misconfigured: " + "; ".join(missing_remote_settings) +
+                    ". Remote mode requires a valid ApiKey, TlsCert, TlsKey and TlsCaCert to be configured."
+                )

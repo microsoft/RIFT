@@ -13,7 +13,7 @@ Do not install RIFT's full requirements into a virtual environment activated by 
 
 - macOS with IDA Pro 9.3 or later.
 - `rustup` and `cargo` on `PATH`.
-- IDA FLIRT tools `pcf` and `sigmake`. In a standard IDA Pro installation they are under `Contents/MacOS/tools/flair/`.
+- IDA FLIRT tools `pcf` and `sigmake`. IDA Pro bundles them under `<IDA app>/Contents/MacOS/tools/flair/`.
 - A dedicated analysis VM with no access to production networks or sensitive data. RIFT is intended for malware analysis.
 
 The macOS system `strings` utility is sufficient for standalone file analysis. No Windows `strings.exe` is required.
@@ -65,7 +65,15 @@ Do not install `PySide6`, `PySide6_Addons`, `PySide6_Essentials`, or `shiboken6`
 
 ## Configure the plugin
 
-Create `$IDAUSR/plugins/rift_essentials/rift_config.cfg` and replace `/path/to/RIFT` with the checkout location:
+First identify the installed IDA application bundle. Its name includes the IDA version, so update this value when using a different release:
+
+```bash
+IDA_APP="/Applications/IDA Professional 9.3.app"
+test -x "$IDA_APP/Contents/MacOS/tools/flair/pcf"
+test -x "$IDA_APP/Contents/MacOS/tools/flair/sigmake"
+```
+
+Create `$IDAUSR/plugins/rift_essentials/rift_config.cfg` and replace `/path/to/RIFT` with the checkout location. The configuration file does not expand the `IDA_APP` shell variable, so enter the full application-bundle paths. For IDA 9.3, use:
 
 ```ini
 [Default]
@@ -77,11 +85,17 @@ RustcHashes = /path/to/RIFT/data/rustc_hashes.json
 StringsTool = /usr/bin/strings
 
 [RiftServer]
+server_mode = local
 Ip = 127.0.0.1
 Port = 5001
+flirt_dir = /path/to/RIFT/ServerStorage
+ApiKey =
+TlsCert =
+TlsKey =
+TlsCaCert =
 ```
 
-The `WorkFolder` and `CargoProjFolder` directories must exist and be writable. Keep the server bound to localhost unless a specific isolated lab design requires another address.
+For another IDA release, replace `IDA Professional 9.3.app` in both FLIRT paths with the exact installed application-bundle name. The `WorkFolder` and `CargoProjFolder` directories must exist and be writable; the server creates `flirt_dir` when it starts. Keep the server in `local` mode and bound to localhost unless a specific isolated lab design requires remote access with API-key and TLS configuration.
 
 ## Start RIFT and use it from IDA
 

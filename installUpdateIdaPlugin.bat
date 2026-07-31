@@ -2,7 +2,7 @@
 REM Usual path C:\Users\[USER]\AppData\Roaming\Hex-Rays\IDA Pro\plugins
 
 if "%~1"=="" (
-    echo [installUpdateIdaPlugin] No path to plugin dir provided! Usually %USERPROFILE%\AppData\Roaming\Hex-Rays\IDA Pro\plugins
+    echo [installUpdateIdaPlugin] No path to plugin dir provided! Usually \"%USERPROFILE%\AppData\Roaming\Hex-Rays\IDA Pro\plugins\"
     exit /b 1
 )
 
@@ -54,10 +54,10 @@ echo.
 echo [installUpdateIdaPlugin] Enter paths below. Press Enter to keep the shown default.
 echo.
 
-set "PCF_PATH=C:\RIFT\bin\pcf.exe"
+set "PCF_PATH=C:\Rift\binaries\pcf.exe"
 set /p "PCF_PATH=Path to pcf.exe [%PCF_PATH%]: "
 
-set "SIGMAKE_PATH=C:\RIFT\bin\sigmake.exe"
+set "SIGMAKE_PATH=C:\Rift\binaries\sigmake.exe"
 set /p "SIGMAKE_PATH=Path to sigmake.exe [%SIGMAKE_PATH%]: "
 
 set "WORK_FOLDER=C:\RIFT\work"
@@ -69,7 +69,7 @@ set /p "CARGO_PROJ_FOLDER=Path to cargo proj folder [%CARGO_PROJ_FOLDER%]: "
 set "RUSTC_HASHES=C:\RIFT\data\rustc_hashes.json"
 set /p "RUSTC_HASHES=Path to rustc_hashes.json [%RUSTC_HASHES%]: "
 
-set "STRINGS_PATH=C:\RIFT\bin\strings.exe"
+set "STRINGS_PATH=C:\Rift\binaries\strings.exe"
 set /p "STRINGS_PATH=Path to strings.exe [%STRINGS_PATH%]: "
 
 echo.
@@ -81,6 +81,17 @@ if /i "%ENABLE_SERVER%"=="Y" (
     set /p "SERVER_IP=RiftServer IP address [127.0.0.1]: "
     set "SERVER_PORT=5001"
     set /p "SERVER_PORT=RiftServer port [5001]: "
+    set "SERVER_MODE=local"
+    set /p "SERVER_MODE=RiftServer mode, local or remote [local]: "
+    set "FLIRT_DIR=C:\RIFT\ServerStorage"
+    set /p "FLIRT_DIR=RiftServer flirt_dir (storage folder) [%FLIRT_DIR%]: "
+)
+
+if /i "%SERVER_MODE%"=="remote" (
+    set "API_KEY="
+    set /p "API_KEY=RiftServer ApiKey: "
+    set "SRC_CA_CERT="
+    set /p "SRC_CA_CERT=Path to the RiftServer's TLS CA cert to pin (TlsCaCert): "
 )
 
 REM Write rift_config.cfg directly to destination
@@ -108,8 +119,20 @@ if /i "%ENABLE_SERVER%"=="Y" (
     (
     echo.
     echo [RiftServer]
+    echo # local or remote
+    echo server_mode = %SERVER_MODE%
     echo Ip = %SERVER_IP%
     echo Port = %SERVER_PORT%
+    echo flirt_dir = %FLIRT_DIR%
+    ) >> "%DEST_CFG%"
+)
+
+if /i "%SERVER_MODE%"=="remote" (
+    echo [installUpdateIdaPlugin] Copying TLS CA cert to %IdaPluginsDir%\rift_essentials\rift_ca_cert.pem
+    copy "%SRC_CA_CERT%" "%IdaPluginsDir%\rift_essentials\rift_ca_cert.pem"
+    (
+    echo ApiKey = %API_KEY%
+    echo TlsCaCert = %IdaPluginsDir%\rift_essentials\rift_ca_cert.pem
     ) >> "%DEST_CFG%"
 )
 

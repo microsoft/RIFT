@@ -32,13 +32,14 @@ class RiftFlirtError(RiftEngineError):
 class RiftEngine:
     """Core engine for Rust binary analysis and FLIRT signature generation."""
 
-    def __init__(self, logger=None, config_path=None, output_folder="./Output"):
+    def __init__(self, logger=None, config=None, output_folder="./Output"):
         """
         Initialize RIFT engine with lightweight setup.
 
         Args:
             logger: Logger instance (creates default if None)
-            config_path: Path to config file (default: uses RiftConfig default)
+            config: Either a pre-built RiftConfig instance, or a path (str/Path) to a config file
+                which will be used to construct a RiftConfig
             output_folder: Output folder for FLIRT signatures (default: ./Output)
 
         Raises:
@@ -46,8 +47,15 @@ class RiftEngine:
         """
         try:
             self.logger = get_logger() if logger is None else logger
-            self.cfg = RiftConfig(self.logger, config_path)
+            if isinstance(config, RiftConfig):
+                self.cfg = config
+            else:
+                self.cfg = RiftConfig(self.logger, config)
+            self.output_folder = Path(output_folder).resolve()
+            if not self.output_folder.exists:
+                raise RiftEngineError("Invalid output folder!")
             self.output_folder = str(Path(output_folder).resolve())
+
         except Exception as e:
             raise RiftConfigError(f"Failed to initialize RIFT engine: {e}")
 
@@ -123,6 +131,8 @@ class RiftEngine:
         """
         if self._flirt_initialized:
             return
+        if not self.cfg.flirt_available:
+            raise RiftConfigError("RIFT_Config not set correctly. Cross check if PCF.exe and sigmake.exe paths are set correctly")
 
         try:
             self.logger.info("Initializing FLIRT generation environment...")
@@ -182,6 +192,8 @@ class RiftEngine:
 
         # Ensure FLIRT environment is initialized
         self._ensure_flirt_initialized(meta)
+        if self.cfg.flirt_available is False:
+            raise RiftConfigError("RIFT_Config is not set correctly. Either PCF.exe or sigmake.exe paths are not correct")
 
         # Generate FLIRT signatures
         try:
