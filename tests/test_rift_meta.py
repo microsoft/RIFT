@@ -1,5 +1,8 @@
 import unittest
 import sys
+import shutil
+import tempfile
+from pathlib import Path
 sys.path.append("../")
 from librift.rift_meta import RiftMeta, build_rustmeta_from_strings, build_rustmeta_from_binary, build_rustmeta_from_json
 from librift.rift_cfg import RiftConfig
@@ -19,6 +22,27 @@ def get_strings(path):
 class TestRiftMeta(unittest.TestCase):
     """Test cases for RiftMeta metadata extraction."""
 
+    @classmethod
+    def setUpClass(cls):
+        cls.test_root = Path(tempfile.mkdtemp(prefix="rift-meta-tests-"))
+        (cls.test_root / "work").mkdir()
+        (cls.test_root / "tmp").mkdir()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.test_root, ignore_errors=True)
+
+    def make_config(self, strings=None):
+        """Build a test config without relying on the Windows sample paths."""
+        kwargs = {
+            "work_folder": str(self.test_root / "work"),
+            "cargo_proj_folder": str(self.test_root / "tmp"),
+            "rustc_hashes": "data/rustc_hashes.json",
+        }
+        if strings is not None:
+            kwargs["strings"] = strings
+        return RiftConfig(logger, "../rift_config.cfg", **kwargs)
+
     def test_spica_from_strings(self):
         """Test metadata extraction from SPICA sample."""
         expected_rust_crates = ['crossbeam-channel-0.5.8', 'spin-0.5.2', 'smallvec-1.11.0', 'once_cell-1.18.0', 'http-0.2.9', 'tokio-tungstenite-0.19.0', 'want-0.3.1', 'rustls-pemfile-1.0.3', 'futures-core-0.3.28', 'tokio-rustls-0.24.1', 'tinyvec-1.6.0',
@@ -28,7 +52,7 @@ class TestRiftMeta(unittest.TestCase):
 
         strings = get_strings("extracted_strings/strings_spica_37c52481711631a5c73a6341bd8bea302ad57f02199db7624b580058547fb5a9.txt")
         # rift_meta = get_rift_meta(strings)
-        rift_cfg = RiftConfig(logger, "../rift_config.cfg")
+        rift_cfg = self.make_config()
         rust_meta = build_rustmeta_from_strings(logger, rift_cfg, strings)
 
         self.assertEqual(rust_meta.commithash, expected_commithash)
@@ -43,7 +67,10 @@ class TestRiftMeta(unittest.TestCase):
         expected_arch = "i686"
         expected_rust_version = "nightly-2025-05-17"
         expected_compiler = "msvc"
-        rift_cfg = RiftConfig(logger, "../rift_config.cfg")
+        strings_tool = shutil.which("strings") or shutil.which("strings.exe")
+        if strings_tool is None:
+            self.skipTest("a strings utility is required for binary extraction")
+        rift_cfg = self.make_config(strings=strings_tool)
         rust_meta = build_rustmeta_from_binary(logger, rift_cfg, binary_path)
 
         # Assert that metadata was extracted
@@ -53,6 +80,22 @@ class TestRiftMeta(unittest.TestCase):
         self.assertEqual(rust_meta.get_rust_version(), expected_rust_version)
         self.assertEqual(rust_meta.compiler, expected_compiler)
 
+    def test_leading_rustc_path_from_ida_strings(self):
+        """Accept the leading /rustc path emitted by IDA's string list."""
+        commithash = "16d2276fa6fccb0cc239a542d4c3f0eb46f660ec"
+        strings = [
+            f"/rustc/{commithash}\\library\\core\\src\\str\\pattern.rs",
+            "_CxxThrowException",
+            "/rust/deps\\rustc-demangle-0.1.24\\src\\legacy.rs",
+        ]
+        rift_cfg = self.make_config()
+        rust_meta = build_rustmeta_from_strings(logger, rift_cfg, strings)
+
+        self.assertIsNotNone(rust_meta)
+        self.assertEqual(rust_meta.commithash, commithash)
+        self.assertEqual(rust_meta.compiler, "msvc")
+        self.assertEqual(rust_meta.get_rust_version(), "nightly-2025-05-17")
+
     def test_build_from_json_1(self):
         """Test metadata creation by parsing legacy JSON file"""
         json_path = "test_files/static_hello_world_i686_pc_windows_mscv.json"
@@ -61,7 +104,7 @@ class TestRiftMeta(unittest.TestCase):
         expected_crates = ["rustc-demangle-0.1.24"]
         expected_filetype = "PE"
 
-        rift_cfg = RiftConfig(logger, "../rift_config.cfg")
+        rift_cfg = self.make_config()
         rust_meta = build_rustmeta_from_json(logger, rift_cfg, json_path)
 
         # Assert that metadata was extracted
@@ -100,7 +143,7 @@ class TestRiftMeta(unittest.TestCase):
             "untrusted-0.7.1", "ahash-0.7.6", "h2-0.3.20"
         ]
 
-        rift_cfg = RiftConfig(logger, "../rift_config.cfg")
+        rift_cfg = self.make_config()
         rust_meta = build_rustmeta_from_json(logger, rift_cfg, json_path)
 
         # Assert that metadata was extracted

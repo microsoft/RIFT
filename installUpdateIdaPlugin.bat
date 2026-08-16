@@ -35,8 +35,10 @@ copy .\librift\rift_connector.py "%IdaPluginsDir%\librift\rift_connector.py"
 
 
 mkdir "%IdaPluginsDir%\rift_essentials"
+mkdir "%IdaPluginsDir%\rift_essentials\work"
+mkdir "%IdaPluginsDir%\rift_essentials\tmp"
 echo [installUpdateIdaPlugin] Copying config and rustc_hashes.json file to %IdaPluginsDir%\rift_essentials
-REM copy .\data\rustc_hashes.json "%IdaPluginsDir%\rift_essentials\rustc_hashes.json"
+copy .\data\rustc_hashes.json "%IdaPluginsDir%\rift_essentials\rustc_hashes.json"
 
 REM Ask whether to configure rift_config.cfg interactively
 echo.

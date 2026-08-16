@@ -8,7 +8,7 @@
 
 > 🧪 **Experimental Build**
 >
-> This branch is under active development. Functionality may be incomplete or subject to change. **Testing has been conducted on Windows only.** Behaviour on Linux or macOS is untested and not guaranteed.
+> This branch is under active development. Functionality may be incomplete or subject to change. Windows and macOS with IDA Pro 9.3 have been validated for the documented workflows. Linux remains untested and is not guaranteed.
 
 RIFT (Rust Interactive Function Tool) is a toolsuite to assist reverse engineers in identifying library code in rust malware. It is a research project developed by the MIRAGE Team, explores library recognition techniques conducted on rust binaries and was presented at RECON 2025.
 
@@ -48,7 +48,9 @@ This branch is an updated version, supporting only FLIRT signature generation. F
 4. Place Ida Pro utilities (`pcf`, `sigmake`) and `strings.exe` from preferably SysInternals Suite in the `bin/` directory
 5. Configure `rift_config.cfg` with correct paths
 
-Furthermore, RIFT depends on `data/rustc_hashes.json` to determine the rust version of the corresponding commit hash. This file should be updated regularily.
+For macOS with IDA Pro 9.3 or later, follow the [macOS and IDA setup guide](docs/macos-ida.md) instead of the platform-specific installation steps above. It uses a dedicated RIFT runtime so RIFT's Qt packages do not replace IDA's bundled Qt libraries.
+
+Furthermore, RIFT depends on `data/rustc_hashes.json` to determine the Rust version of the corresponding commit hash. This file should be updated regularly.
 
 To update the `rustc_hashes.json` file, one can simply always pull the latest RIFT version or generate it by themselves via running `update_rustc_hashes.ps1` or `update_rustc_hashes.sh`, depending on the environment.
 
@@ -168,6 +170,8 @@ The RIFT IDA Pro plugin allows FLIRT signatures to be generated and optionally a
 - RIFT server running and reachable (see [Server Mode](#server-mode))
 - IDA Pro with Python support (IDA 7.x+)
 - `rift_config.cfg` configured with the correct server IP and port
+
+On macOS, use the [macOS and IDA setup guide](docs/macos-ida.md). Do not install the full RIFT `requirements.txt` into a virtual environment that IDA activates; IDA must load its bundled PySide6/Qt runtime.
 
 #### Installation
 

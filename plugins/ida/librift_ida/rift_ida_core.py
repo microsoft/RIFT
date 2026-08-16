@@ -36,20 +36,27 @@ class RiftIdaCore:
 
     def init_env(self):
         """Initialize the environment, load rustc hashes and RiftConfig class."""
+        rustc_hashes_path = os.path.join(self.ess_path, "rustc_hashes.json")
         cfg_path = os.path.join(self.ess_path, "rift_config.cfg")
-        self.rift_cfg = RiftConfig(self.logger, cfg_path)
-        if self.rift_cfg.api_ip == "NOT_SET" or self.rift_cfg.api_port == "NOT_SET":
-            self.logger.warning("RIFT Server IP and Port are not set, server mode will no be available!")
-
+        self.rift_cfg = RiftConfig(self.logger, cfg_path, rustc_hashes=rustc_hashes_path)
+        if (
+            not self.rift_cfg.api_ip
+            or self.rift_cfg.api_ip == "NOT_SET"
+            or not self.rift_cfg.api_port
+            or self.rift_cfg.api_port == "NOT_SET"
+        ):
+            self.logger.warning("RIFT Server IP and Port are not set, server mode will not be available!")
         self.rift_meta = RiftMeta(self.logger, self.rift_cfg)
         self.rift_conn = self.init_server_conn()
-        self.logger.info(f"Initialized RiftIdaCore!\nCfgPath = {cfg_path}")
+        self.logger.info(
+            f"Initialized RiftIdaCore!\nCfgPath = {cfg_path}\nHashesPath = {rustc_hashes_path}"
+        )
         self.is_initialized = True
         return True
 
     def init_server_conn(self):
         """Returns RiftConnector instance if server is available"""
-        
+
         rift_conn = None
         # Check IP or port first
         if self.rift_cfg.api_ip == "NOT_SET" or self.rift_cfg.api_port == "NOT_SET":
@@ -119,7 +126,7 @@ class RiftIdaCore:
             server_url = f"http://{self.rift_cfg.api_ip}:{self.rift_cfg.api_port}"
             self.logger.info(f"ServerUrl = {server_url}, checking if RIFT server is available ..")
             self.rift_conn = self.init_server_conn()
-    
+
         if self.rift_conn is not None:
             result = self.rift_conn.health_check()
             if "status" in list(result.keys()):

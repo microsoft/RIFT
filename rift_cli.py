@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from librift.utils import get_logger, parse_crate_string
 from librift.rift_meta import build_rustmeta_from_string, build_rustmeta_from_json
-from rift_engine import RiftEngine
+from rift_engine import RiftEngine, RiftEngineError
 
 logger = None
 
@@ -12,7 +12,7 @@ def handle_file_mode(input_file, cfg_path, output_path, only_meta=False):
     """Handle file analysis mode - analyze binary and optionally generate FLIRT signatures."""
     if not os.path.isfile(input_file):
         logger.error(f"File {input_file} does not exist!")
-        return 0
+        return 1
 
     logger.info(f"Running in file analysis mode: {input_file}")
     api = RiftEngine(logger, cfg_path, output_folder=output_path)
@@ -21,28 +21,28 @@ def handle_file_mode(input_file, cfg_path, output_path, only_meta=False):
         meta = api.get_meta(input_file)
         if meta is None:
             logger.error("Could not extract metadata from binary")
-            return 0
+            return 1
         meta.print()
-        return 1
+        return 0
 
     # Generate FLIRT signatures (default behavior when --only-meta is not set)
     logger.info("Generating FLIRT signatures for analyzed binary")
     api.generate_flirt_from_binary(input_file, output_path)
 
-    return 1
+    return 0
 
 def handle_json_mode(json_file, cfg_path, output_path):
     """Handle JSON mode - generate FLIRT signatures from JSON configuration."""
     if not os.path.isfile(json_file):
         logger.error(f"File {json_file} does not exist!")
-        return 0
+        return 1
 
     api = RiftEngine(logger, cfg_path, output_folder=output_path)
     meta = build_rustmeta_from_json(logger, api.cfg, json_file)
     logger.info(f"Generating FLIRT signature for crates and compiler passed through {json_file}")
     api.generate_compiler_flirt(meta, output_path)
     api.generate_crates_flirt(meta, output_path)
-    return 1
+    return 0
 
 def handle_gen_mode(cfg_path, output_path, compiler="", crate=""):
     """Handle generation mode - generate FLIRT signatures for crate/compiler combinations."""
@@ -59,7 +59,7 @@ def handle_gen_mode(cfg_path, output_path, compiler="", crate=""):
         crate_obj = parse_crate_string(crate)
         logger.debug(f"Compiling crate = {crate_obj.get_id()}")
         api.generate_crate_flirt(meta, crate_obj, output_path)
-        return 1
+        return 0
 
     # Case 2: Only compiler provided (no crate)
     elif compiler and not crate:
@@ -72,13 +72,13 @@ def handle_gen_mode(cfg_path, output_path, compiler="", crate=""):
         try:
             api.generate_compiler_flirt(meta, output_path)
             logger.info("Compiler FLIRT signature generated successfully")
-            return 1
-        except Exception as e:
-            logger.error(f"Failed to generate compiler FLIRT: {e}")
             return 0
+        except RiftEngineError as e:
+            logger.error(f"Failed to generate compiler FLIRT: {e}")
+            return 1
     else:
         logger.error(f"Providing only the crate and not the compiler is not supported yet!")
-        return 0
+        return 1
 
 def main(args):
     """Main entry point - routes to appropriate handler based on arguments."""
@@ -88,7 +88,7 @@ def main(args):
     # Pre-check: Verify config file exists
     if not os.path.isfile(args.cfg):
         logger.error(f"Config file {args.cfg} does not exist!")
-        return 0
+        return 1
 
     # Mode 1: File analysis mode (when -f/--file is provided)
     if args.file:
@@ -104,10 +104,10 @@ def main(args):
 
     else:
         logger.error("No valid arguments provided. Use --help for usage information.")
-        return 0
+        return 1
 
 
-RIFT_ASCII = """
+RIFT_ASCII = r"""
  ____  ___ _____ _____
 |  _ \|_ _|  ___|_   _|
 | |_) || || |_    | |

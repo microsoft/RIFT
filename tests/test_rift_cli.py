@@ -9,6 +9,7 @@ from unittest.mock import patch, MagicMock
 from io import StringIO
 import rift_cli
 from librift.rift_meta import RiftInvalidCompiler
+from rift_engine import RiftFlirtError
 
 
 class TestHandleGenMode(unittest.TestCase):
@@ -75,7 +76,7 @@ class TestHandleGenMode(unittest.TestCase):
             )
 
             # Assertions
-            self.assertEqual(result, 1, "Function should return 1 for success")
+            self.assertEqual(result, 0, "Function should return 0 for success")
             MockRiftEngine.assert_called_once_with(rift_cli.logger, self.cfg_path, output_folder=output_path)
             mock_build_meta.assert_called_once_with(compiler)
             mock_parse_crate.assert_called_once_with(crate)
@@ -102,7 +103,7 @@ class TestHandleGenMode(unittest.TestCase):
             )
 
             # Assertions
-            self.assertEqual(result, 0, "Function should return 0 for failure")
+            self.assertEqual(result, 1, "Function should return 1 for failure")
             mock_logger.error.assert_called_with(
                 "Providing only the crate and not the compiler is not supported yet!"
             )
@@ -136,10 +137,31 @@ class TestHandleGenMode(unittest.TestCase):
             )
 
             # Assertions
-            self.assertEqual(result, 1, "Function should return 1 for success")
+            self.assertEqual(result, 0, "Function should return 0 for success")
             MockRiftEngine.assert_called_once_with(rift_cli.logger, self.cfg_path, output_folder=output_path)
             mock_build_meta.assert_called_once_with(compiler)
             mock_api_instance.generate_compiler_flirt.assert_called_once_with(mock_meta, output_path)
+
+    def test_handle_gen_mode_case5_compiler_generation_failure(self):
+        """Compiler generation failures return a non-zero CLI status."""
+        compiler = "1.88-i686-pc-windows-gnu"
+        output_path = str(self.test_output_dir.resolve())
+
+        with patch('rift_cli.RiftEngine') as MockRiftEngine, \
+             patch('rift_cli.build_rustmeta_from_string') as mock_build_meta:
+            mock_api_instance = MagicMock()
+            mock_api_instance.generate_compiler_flirt.side_effect = RiftFlirtError("generation failed")
+            MockRiftEngine.return_value = mock_api_instance
+            mock_build_meta.return_value = MagicMock()
+
+            result = rift_cli.handle_gen_mode(
+                self.cfg_path,
+                output_path,
+                compiler=compiler,
+                crate=""
+            )
+
+            self.assertEqual(result, 1, "Function should return 1 for failure")
 
     def test_handle_gen_mode_case4_invalid_toolchain_fails(self):
         """

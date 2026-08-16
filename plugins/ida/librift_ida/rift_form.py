@@ -196,10 +196,10 @@ class RiftIdaForm(idaapi.PluginForm):
         self.enable_cb = QtWidgets.QCheckBox("Enable Server")
         self.enable_cb.setChecked(False)
         self.enable_cb.stateChanged.connect(self.onEnableServerChanged)
-        self.silent_cb = QtWidgets.QCheckBox("Apply FLIRT silently") 
-        self.silent_cb.setChecked(True) 
-        servers_opts_layout.addWidget(self.status_server, 1) 
-        servers_opts_layout.addWidget(self.enable_cb, 1) 
+        self.silent_cb = QtWidgets.QCheckBox("Apply FLIRT silently")
+        self.silent_cb.setChecked(True)
+        servers_opts_layout.addWidget(self.status_server, 1)
+        servers_opts_layout.addWidget(self.enable_cb, 1)
         servers_opts_layout.addWidget(self.silent_cb, 1)
 
         # Compiler options

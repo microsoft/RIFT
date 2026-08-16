@@ -1,5 +1,6 @@
 import os
 import configparser
+import shutil
 from typing import Optional, Dict, Any
 from librift.utils import read_json
 
@@ -55,6 +56,7 @@ class RiftConfig:
 
         config = configparser.ConfigParser()
         read_files = config.read(self.config_path)
+        config_dir = os.path.dirname(os.path.abspath(self.config_path))
         if not read_files:
             self.logger.warning(
                 f"Config file '{self.config_path}' not found or unreadable. "
@@ -76,12 +78,20 @@ class RiftConfig:
                 return cfg_value
             return default
 
-        def _norm_path(p: Optional[str]) -> Optional[str]:
+        def _norm_path(p: Optional[str], *, allow_command: bool = False) -> Optional[str]:
             """Normalize and expand path. Args: p (str or None). Returns: str or None: Absolute expanded path."""
             if not p or p == "NOT_SET":
                 return p
             # Expand %VAR%, $VAR, ~ and make absolute
-            return os.path.abspath(os.path.expanduser(os.path.expandvars(p)))
+            expanded = os.path.expanduser(os.path.expandvars(p))
+            if allow_command and not os.path.dirname(expanded) and not os.path.isabs(expanded):
+                config_relative = os.path.join(config_dir, expanded)
+                if os.path.isfile(config_relative):
+                    return os.path.abspath(config_relative)
+                return expanded
+            if not os.path.isabs(expanded):
+                expanded = os.path.join(config_dir, expanded)
+            return os.path.abspath(expanded)
 
         # ---- read config values
         cfg_work_folder       = _cfg_get("Default", "WorkFolder")
@@ -104,7 +114,7 @@ class RiftConfig:
         self.cargo_proj_folder = _norm_path(_resolve(cargo_proj_folder, cfg_cargo_proj_folder))
         self.pcf               = _norm_path(_resolve(pcf,               cfg_pcf))
         self.sigmake           = _norm_path(_resolve(sigmake,           cfg_sigmake))
-        self.strings           = _norm_path(_resolve(strings,           cfg_strings))
+        self.strings           = _norm_path(_resolve(strings,           cfg_strings), allow_command=True)
         rustc_hashes_path      = _norm_path(_resolve(rustc_hashes,      cfg_rustc_hashes, default="NOT_SET"))
         self.api_ip            = _resolve(api_ip,                        cfg_api_ip)
         self.api_port          = _resolve(api_port,                      cfg_api_port)
@@ -172,7 +182,10 @@ class RiftConfig:
             )
             self.flirt_available = False
 
-        if not self.strings or self.strings == "NOT_SET" or not os.path.isfile(self.strings):
+        strings_available = self.strings and (
+            os.path.isfile(self.strings) or shutil.which(self.strings) is not None
+        )
+        if not strings_available:
             self.logger.warning(
                 f"StringsTool = {self.strings} does not exist. Running RIFT as standalone tool will fail."
             )

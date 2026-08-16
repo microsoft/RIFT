@@ -194,7 +194,7 @@ class RiftEngine:
         self._ensure_flirt_initialized(meta)
         if self.cfg.flirt_available is False:
             raise RiftConfigError("RIFT_Config is not set correctly. Either PCF.exe or sigmake.exe paths are not correct")
-        
+
         # Generate FLIRT signatures
         try:
             output_path = output_folder or self.output_folder

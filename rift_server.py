@@ -84,7 +84,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         if provided is None:
             return False
         return hmac.compare_digest(provided, self.api.api_key or "")
-    
+
     def send_file(self, file_response):
         """Send FLIRT signature file"""
         file_size = os.path.getsize(file_response.path)
@@ -113,7 +113,7 @@ class RIFT_API():
         self.auth_exempt_paths = {"/health"}
         self.server_mode = None
 
-    
+
 
     def get(self, path):
         def wrapper(fn):
@@ -250,7 +250,7 @@ def main(args):
             logger.error(f"server_mode=remote requires a valid {', '.join(missing)} in the config. Refusing to start.")
             return
         # if remote, we want to set the api storage here. This is the folder we store the flirt signature on the server device
-    
+
     # However, if we are in local mode, we do not need this server storage! We store the files, whatever the user configures through the mask
 
     rift_api = RiftEngine(logger, args.cfg, rift_cfg.server_storage)
@@ -260,7 +260,7 @@ def main(args):
     api.api_key = rift_cfg.api_key
     api.server_mode = rift_api.cfg.server_mode
     api.require_auth = api.server_mode == "remote"
-    
+
     # Start background worker
     api.start_worker()
 
@@ -275,7 +275,7 @@ def main(args):
             api.stop_worker()
             httpd.server_close()
             return
-    
+
 
     def shutdown_handler(signum, frame):
         logger.info("Shutdown signal received, stopping server...")
