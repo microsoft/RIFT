@@ -134,10 +134,10 @@ class RIFT_API():
         self.worker = FlirtWorker(
             job_registry=self.job_registry,
             rift_api=self.rift_api,
-            output_folder=self.output_folder,
+            output_folder=self.rift_api.output_folder,
             logger=self.logger,
             storage=self.storage,
-            is_remote = self.rift_api.cfg.server_mode == "remote"
+            is_remote=self.rift_api.cfg.server_mode == "remote"
         )
         self.worker.start()
 
@@ -246,17 +246,32 @@ def main(args):
             missing.append("TlsCert")
         if not rift_cfg.tls_key or rift_cfg.tls_key == "NOT_SET" or not os.path.isfile(rift_cfg.tls_key):
             missing.append("TlsKey")
+        if not rift_cfg.server_storage or rift_cfg.server_storage == "NOT_SET":
+            missing.append("flirt_dir")
         if missing:
             logger.error(f"server_mode=remote requires a valid {', '.join(missing)} in the config. Refusing to start.")
             return
         # if remote, we want to set the api storage here. This is the folder we store the flirt signature on the server device
-    
+
     # However, if we are in local mode, we do not need this server storage! We store the files, whatever the user configures through the mask
 
-    rift_api = RiftEngine(logger, args.cfg, rift_cfg.server_storage)
+    storage = None
+    output_folder = args.output
+    if rift_cfg.server_mode == "remote":
+        storage = ServerStorage(logger, rift_cfg.server_storage)
+        if not output_folder:
+            output_folder = storage.path
+    elif not output_folder:
+        output_folder = "./Output"
+
+    output_folder = os.path.abspath(output_folder)
+    os.makedirs(output_folder, exist_ok=True)
+
+    rift_api = RiftEngine(logger, args.cfg, output_folder)
     api.rift_api = rift_api
     api.logger = logger
-    api.storage = ServerStorage(logger, rift_cfg.server_storage)
+    api.storage = storage
+    api.output_folder = output_folder if args.output or rift_cfg.server_mode == "remote" else None
     api.api_key = rift_cfg.api_key
     api.server_mode = rift_api.cfg.server_mode
     api.require_auth = api.server_mode == "remote"
@@ -291,6 +306,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("-o", "--output", help="Output folder for generated signatures")
     parser.add_argument("--log", help="Log file output")
     parser.add_argument("--verbose", default=False, action="store_true", help="Enable verbose logging")
     parser.add_argument("--cfg", help="Path to rift_config.cfg", default="./rift_config.cfg")

@@ -1,3 +1,4 @@
+import os
 import queue
 import threading
 from datetime import datetime
@@ -127,12 +128,12 @@ class FlirtWorker:
         rust_meta.compiler = rust_meta.get_compiler_from_target_triple(
             json_data["target_triple"]
         )
-        if "output_folder" in json_data.keys():
-            self._output_folder = json_data["output_folder"]
+        output_folder = json_data.get("output_folder") or self._output_folder
+        os.makedirs(output_folder, exist_ok=True)
 
         # Generate compiler FLIRT
         self._registry.update_job(job.job_id, progress="Generating compiler FLIRT...")
-        compiler_sig = self._rift_api.generate_compiler_flirt(rust_meta, self._output_folder)
+        compiler_sig = self._rift_api.generate_compiler_flirt(rust_meta, output_folder)
         if compiler_sig:
             result_files.append(str(compiler_sig))
             if self._storage and self.is_remote:
@@ -146,7 +147,7 @@ class FlirtWorker:
                 progress=f"Processing crate {i}/{len(crates)}: {crate.get_id()}"
             )
             try:
-                crate_sig = self._rift_api.generate_crate_flirt(rust_meta, crate, self._output_folder, debug_build=json_data.get("debug_build", False))
+                crate_sig = self._rift_api.generate_crate_flirt(rust_meta, crate, output_folder, debug_build=json_data.get("debug_build", False))
                 if crate_sig:
                     result_files.append(str(crate_sig))
                     if self._storage and self.is_remote:
