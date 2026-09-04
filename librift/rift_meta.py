@@ -23,7 +23,7 @@ ENV_STRINGS = {
         "std/src/sys/alloc/uefi.rs": "uefi",
 }
 
-RE_RUSTLIB_PATTERN = r".{1,250}[\\|\/](.{1,50}-\d+\.\d+.\d+(-.{1,20})?)[\\|\/].{1,100}\.rs"
+RE_RUSTLIB_PATTERN = r".{1,250}[\\/]([^\\/]{1,50}-\d+\.\d+\.\d+(?:-[^\\/]{1,20})?)[\\/]src[\\/].{1,100}\.rs"
 RE_COMMITHASH_PATTERN = r".{1,250}rustc[\\|\/]([0-9a-zA-Z]{40})[\\|\/]"
 
 # NOTE: Hardcoded check in compiler pattern if ends with -gnu or -msvc
@@ -204,7 +204,7 @@ class RiftMeta:
                 continue
 
             # Extract crate information
-            if re.search(r"(github|\.cargo|\.rustup|rustc|library|crates\.io|rust[\\|\/]deps)", s) is not None and (match := self.__rustlib_re.match(s)):
+            if re.search(r"(github|\.cargo|\.rustup|rustc|library|crates\.io|rust[\\|\/]deps|[\\|\/]deps[\\|\/])", s) is not None and (match := self.__rustlib_re.match(s)):
                 crate = match.group(1)
                 self.logger.debug(f"Extracted crate = {crate}")
                 crates.add(crate)

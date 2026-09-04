@@ -130,8 +130,9 @@ class TestOutputPrecedence(unittest.TestCase):
             "output_folder": "client-output",
         }
 
+        submit_flirt_job = rift_server.api.routing["POST"]["/flirt"]
         with patch("rift_server.api", fake_api):
-            rift_server.submit_flirt_job(request)
+            submit_flirt_job(request)
 
         self.assertEqual(request["output_folder"], "server-output")
 
