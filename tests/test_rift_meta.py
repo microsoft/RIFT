@@ -1,6 +1,11 @@
 import unittest
 import sys
-sys.path.append("../")
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from librift.rift_meta import RiftMeta, build_rustmeta_from_strings, build_rustmeta_from_binary, build_rustmeta_from_json
 from librift.rift_cfg import RiftConfig
 from librift.utils import get_logger
@@ -112,6 +117,64 @@ class TestRiftMeta(unittest.TestCase):
         self.assertEqual(rust_meta.get_rust_version(), expected_rust_version)
         self.assertCountEqual(rust_meta.get_crates_list(), expected_crates)
         print("Test SPICA JSON success")
+
+
+class TestRiftMetaStringExtraction(unittest.TestCase):
+    def setUp(self):
+        self.commithash = "07dca489ac2d933c78d3c5158e3f43beefeb02ce"
+        cfg = SimpleNamespace(rustc_hashes=[{
+            "git_commit_hash": self.commithash,
+            "hash_short": self.commithash[:9],
+            "version": "1.0.0",
+            "version_short": "1.0.0",
+            "ts": None,
+        }])
+        self.rift_meta = RiftMeta(MagicMock(), cfg)
+
+    def extract_meta(self, strings):
+        rustc_path = rf"/rustc/{self.commithash}\library\core\src\lib.rs"
+        return self.rift_meta.extract_meta([rustc_path] + strings)
+
+    def test_get_crates(self):
+        test_cases = [
+            ([
+                "/home/kali/.cargo/registry/src/index.crates.io-6f17d22bba15001f/clap-3.2.25/src/mkeymap.rs",
+                "/rust/deps/miniz_oxide-0.7.4/src/inflate/core.rs",
+                ".cargo\\registry\\src\\index.crates.io-6f17d22bba15001f\\tokio-1.32.0\\src\\sync\\mpsc\\chan.rs",
+            ], ["clap-3.2.25", "miniz_oxide-0.7.4", "tokio-1.32.0"]),
+            ([
+                "/home/kali/.cargo/registry/src/index.crates.io-6f17d22bba15001f/clap/src/mkeymap.rs",
+                "/home/kali/.cargo/registry/src//inflate/src/mkeymap.rs",
+                "/deps/miniz_oxide-0.7.4/src/inflate/core.rs",
+            ], ["miniz_oxide-0.7.4"]),
+            (["src/.cargo/registry/src/gitlab.local-6e6d3f8bd0b6968f/tokio-1.34.0/src/runtime/context/runtime.rs"],
+             ["tokio-1.34.0"]),
+            (["C:\\Users\\user\\.cargo\\registry\\src\\index.crates.io-6f17d22bba15001f\\rand-0.9.0-alpha.2\\src\\rngs\\thread.rs"],
+             ["rand-0.9.0-alpha.2"]),
+        ]
+
+        for strings, expected in test_cases:
+            with self.subTest(expected=expected):
+                self.assertCountEqual(self.extract_meta(strings).get_crates_list(), expected)
+
+    def test_get_commithash(self):
+        strings = [rf"/rustc/{self.commithash}\library\core\src", "_CxxThrowException"]
+        self.assertEqual(self.rift_meta.extract_meta(strings).commithash, self.commithash)
+
+        malformed = [r"/rustc/7dca489ac2d933c78d3c5158e3f43beefeb02ce\library\core\src"]
+        self.assertIsNone(self.rift_meta.extract_meta(malformed))
+
+    def test_determine_env(self):
+        test_cases = [
+            (["Mingw-w64 runtime failure:"], "gnu"),
+            (["_CxxThrowException"], "msvc"),
+            (["std/src/sys/alloc/uefi.rs"], "uefi"),
+        ]
+
+        for strings, expected in test_cases:
+            with self.subTest(expected=expected):
+                self.assertEqual(self.extract_meta(strings).compiler, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

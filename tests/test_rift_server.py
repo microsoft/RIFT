@@ -1,8 +1,16 @@
 import os
+import sys
+import sys
 import tempfile
 import unittest
+from pathlib import Path
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import rift_server
 from libsrv.flirtworker import FlirtWorker
