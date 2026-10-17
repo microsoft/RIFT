@@ -24,9 +24,28 @@ class RiftMetadataError(RiftEngineError):
     pass
 
 
-class RiftFlirtError(RiftEngineError):
+class RiftSignatureError(RiftEngineError):
+    """Signature generation errors, whatever the output format."""
+    pass
+
+
+class RiftFlirtError(RiftSignatureError):
     """FLIRT generation errors."""
     pass
+
+
+class RiftFidError(RiftSignatureError):
+    """Function ID database generation errors."""
+    pass
+
+
+# Per-format config attribute, error type and hint for a missing toolchain.
+FORMAT_AVAILABILITY = {"flirt": "flirt_available", "fid": "fid_available"}
+FORMAT_ERRORS = {"flirt": RiftFlirtError, "fid": RiftFidError}
+FORMAT_HINTS = {
+    "flirt": "Set PcfPath and SigmakePath in the config to generate FLIRT signatures.",
+    "fid": "Set AnalyzeHeadlessPath in the config to generate Function ID databases.",
+}
 
 
 class RiftEngine:
@@ -64,8 +83,8 @@ class RiftEngine:
         # Always-available components (lightweight)
         self._rift_meta = None
 
-        # Lazy-loaded FLIRT components (heavy initialization)
-        self._flirt_initialized = False
+        # Lazy-loaded generation components (heavy initialization)
+        self._initialized = False
         self._rift_os = None
         self._rift_gen = None
         self._storage_handler = None
@@ -117,27 +136,28 @@ class RiftEngine:
         """
         return self.extract_metadata(source)
 
-    def _ensure_flirt_initialized(self, meta):
-        """
-        Initialize FLIRT generation components (called lazily on first use).
+    def backend_available(self, fmt):
+        """Returns True if the backend for the given signature format is configured."""
+        if fmt not in FORMAT_AVAILABILITY:
+            raise RiftConfigError(f"Unknown signature format = {fmt}!")
+        return getattr(self.cfg, FORMAT_AVAILABILITY[fmt])
 
-        This performs heavy initialization including:
-        - Setting up cargo projects
-        - Initializing file system structures
-        - Configuring FLIRT generator
-
-        Raises:
-            RiftFlirtError: If FLIRT initialization fails
+    def _ensure_initialized(self, meta, fmt):
         """
-        if self._flirt_initialized:
+        Initialize the generation environment (lazily, on first use).
+
+        Fails only when the backend for the requested format is missing, so a
+        Ghidra-only host can generate .fidb files with no IDA installed.
+        """
+        if not self.backend_available(fmt):
+            raise RiftConfigError(
+                f"Signature format '{fmt}' is not available. {FORMAT_HINTS[fmt]}"
+            )
+        if self._initialized:
             return
-        if not self.cfg.flirt_available:
-            raise RiftConfigError("RIFT_Config not set correctly. Cross check if PCF.exe and sigmake.exe paths are set correctly")
 
         try:
-            self.logger.info("Initializing FLIRT generation environment...")
-
-            # Initialize components needed for FLIRT generation
+            self.logger.info("Initializing signature generation environment...")
             self._rift_os = RiftOs(logger=self.logger, cfg=self.cfg)
 
             try:
@@ -151,7 +171,6 @@ class RiftEngine:
                 self.output_folder,
                 self.logger
             )
-            # Create FLIRT generator
             self._rift_gen = RiftGenerator(
                 self.cfg,
                 self.logger,
@@ -160,15 +179,76 @@ class RiftEngine:
                 self._storage_handler,
                 self._proj_handler
             )
-            self.logger.debug(f"Generating FLIRT environment")
-            # Initialize FLIRT environment
             self._rift_gen.init_env(meta)
 
-            self._flirt_initialized = True
-            self.logger.info("FLIRT generation environment initialized successfully")
+            self._initialized = True
+            self.logger.info("Signature generation environment initialized successfully")
 
         except Exception as e:
-            raise RiftFlirtError(f"Failed to initialize FLIRT environment: {e}")
+            raise FORMAT_ERRORS[fmt](f"Failed to initialize generation environment: {e}")
+
+    def _resolve_output_folder(self, output_folder):
+        """
+        Returns the absolute output folder, falling back to the default one.
+
+        Must run before _ensure_initialized, which changes the working directory
+        to the cargo project and would make a relative path resolve there.
+        """
+        return str(Path(output_folder).resolve()) if output_folder else self.output_folder
+
+    # ---------------- per-format generation (internal) ----------------
+
+    def _generate_from_binary(self, binary_path, output_folder, fmt):
+        """Generates toolchain and crate signatures for a binary in one format."""
+        meta = self.extract_metadata(binary_path)
+        if not meta:
+            raise RiftMetadataError(f"Could not extract metadata from binary: {binary_path}")
+
+        output_path = self._resolve_output_folder(output_folder)
+        self._ensure_initialized(meta, fmt)
+        try:
+            self.logger.info(f"Generating {fmt} signatures for {binary_path}")
+            self._rift_gen.gen_toolc_flirt(meta, output_path, formats=(fmt,))
+            self._rift_gen.generate_crates_flirt(meta, output_path, formats=(fmt,))
+            return output_path
+        except Exception as e:
+            raise FORMAT_ERRORS[fmt](f"Failed to generate {fmt} signatures: {e}")
+
+    def _generate_compiler_signature(self, meta, output_folder, fmt):
+        """Generates the toolchain signature in one format. Returns its path."""
+        output_path = self._resolve_output_folder(output_folder)
+        self._ensure_initialized(meta, fmt)
+        try:
+            self.logger.info(
+                f"Generating compiler {fmt} signature for {meta.get_target_compiler()}, output_path = {output_path}")
+            sig_paths = self._rift_gen.gen_toolc_flirt(meta, output_path, formats=(fmt,))
+            return sig_paths[0] if sig_paths else None
+        except Exception as e:
+            raise FORMAT_ERRORS[fmt](f"Failed to generate compiler {fmt} signature: {e}")
+
+    def _generate_crate_signature(self, meta, crate, output_folder, debug_build, fmt):
+        """Generates a single crate's signature in one format. Returns its path."""
+        output_path = self._resolve_output_folder(output_folder)
+        self._ensure_initialized(meta, fmt)
+        try:
+            self.logger.info(f"Generating {fmt} signature for {crate.get_id()}, output_path = {output_path}")
+            sig_paths = self._rift_gen.generate_crate_flirt(
+                meta, crate, output_path, debug_build=debug_build, formats=(fmt,))
+            return sig_paths[0] if sig_paths else None
+        except Exception as e:
+            raise FORMAT_ERRORS[fmt](f"Failed to generate crate {fmt} signature for {crate.get_id()}")
+
+    def _generate_crates_signatures(self, meta, output_folder, fmt):
+        """Generates signatures for every crate in the metadata, in one format."""
+        output_path = self._resolve_output_folder(output_folder)
+        self._ensure_initialized(meta, fmt)
+        try:
+            self._rift_gen.generate_crates_flirt(meta, output_path, formats=(fmt,))
+            return output_path
+        except Exception as e:
+            raise FORMAT_ERRORS[fmt](f"Failed to generate crates {fmt} signatures: {e}")
+
+    # ---------------- FLIRT (IDA Pro .sig) ----------------
 
     def generate_flirt_from_binary(self, binary_path: Union[str, Path], output_folder: Optional[str] = None) -> Optional[Path]:
         """
@@ -185,71 +265,49 @@ class RiftEngine:
             RiftMetadataError: If metadata extraction fails
             RiftFlirtError: If FLIRT generation fails
         """
-        # Extract metadata from binary
-        meta = self.extract_metadata(binary_path)
-        if not meta:
-            raise RiftMetadataError(f"Could not extract metadata from binary: {binary_path}")
-
-        # Ensure FLIRT environment is initialized
-        self._ensure_flirt_initialized(meta)
-        if self.cfg.flirt_available is False:
-            raise RiftConfigError("RIFT_Config is not set correctly. Either PCF.exe or sigmake.exe paths are not correct")
-        
-        # Generate FLIRT signatures
-        try:
-            output_path = output_folder or self.output_folder
-            self.logger.info(f"Generating FLIRT signatures for {binary_path}")
-            self._rift_gen.gen_toolc_flirt(meta, output_path)
-            self._rift_gen.generate_crates_flirt(meta, output_path)
-            return output_path
-
-        except Exception as e:
-            raise RiftFlirtError(f"Failed to generate FLIRT signatures: {e}")
+        return self._generate_from_binary(binary_path, output_folder, "flirt")
 
     def generate_compiler_flirt(self, meta, output_folder: Optional[str] = None) -> Optional[Path]:
-        """
-        Generate FLIRT signature for the Rust compiler itself.
-
-        Args:
-            meta: RustMetadata instance with compiler information
-            output_folder: Output folder (uses default if None)
-
-        Returns:
-            Path to output folder where signature was generated
-
-        Raises:
-            RiftFlirtError: If FLIRT generation fails
-        """
+        """Generate the FLIRT signature for the Rust compiler itself. Returns its path."""
         self.logger.info(f"generate_compiler_flirt output_folder = {output_folder}")
-        # Ensure FLIRT environment is initialized
-        self._ensure_flirt_initialized(meta)
-
-        try:
-            output_path = output_folder or self.output_folder
-            self.logger.info(f"Generating compiler FLIRT signature for {meta.get_target_compiler()}, output_path = {output_path}")
-            output_path = self._rift_gen.gen_toolc_flirt(meta, output_path)
-            return output_path
-
-        except Exception as e:
-            raise RiftFlirtError(f"Failed to generate compiler FLIRT signature: {e}")
+        return self._generate_compiler_signature(meta, output_folder, "flirt")
 
     def generate_crate_flirt(self, meta, crate, output_folder: Optional[str] = None, debug_build=False):
         """Generates flirt signature for a specific crate"""
-        self._ensure_flirt_initialized(meta)
-        try:
-            output_path = output_folder or self.output_folder
-            self.logger.info(f"Generating FLIRT signature for {crate.get_id()}, output_path = {output_path}")
-            output_path = self._rift_gen.generate_crate_flirt(meta, crate, output_path, debug_build=debug_build)
-            return output_path
-        except Exception as e:
-            raise RiftFlirtError(f"Failed to generate crate FLIRT signature for {crate.get_id()}")
+        return self._generate_crate_signature(meta, crate, output_folder, debug_build, "flirt")
 
     def generate_crates_flirt(self, meta, output_folder: Optional[str] = None):
         """Generates FLIRT signatures for a set of crates"""
-        self._ensure_flirt_initialized(meta)
-        try:
-            output_path = output_folder or self.output_folder
-            self._rift_gen.generate_crates_flirt(meta, output_path)
-            return output_path
-        except Exception as e:
-            raise RiftFlirtError(f"Failed to generate crates FLIRT signatures: {e}")
+        return self._generate_crates_signatures(meta, output_folder, "flirt")
+
+    # ---------------- Function ID (Ghidra .fidb) ----------------
+
+    def generate_fid_from_binary(self, binary_path: Union[str, Path], output_folder: Optional[str] = None) -> Optional[Path]:
+        """
+        Generate Function ID databases by analyzing a binary file.
+
+        Args:
+            binary_path: Path to binary file to analyze
+            output_folder: Output folder (uses default if None)
+
+        Returns:
+            Path to output folder where databases were generated
+
+        Raises:
+            RiftMetadataError: If metadata extraction fails
+            RiftFidError: If FID generation fails
+        """
+        return self._generate_from_binary(binary_path, output_folder, "fid")
+
+    def generate_compiler_fid(self, meta, output_folder: Optional[str] = None) -> Optional[Path]:
+        """Generate the Function ID database for the Rust compiler itself. Returns its path."""
+        self.logger.info(f"generate_compiler_fid output_folder = {output_folder}")
+        return self._generate_compiler_signature(meta, output_folder, "fid")
+
+    def generate_crate_fid(self, meta, crate, output_folder: Optional[str] = None, debug_build=False):
+        """Generates a Function ID database for a specific crate"""
+        return self._generate_crate_signature(meta, crate, output_folder, debug_build, "fid")
+
+    def generate_crates_fid(self, meta, output_folder: Optional[str] = None):
+        """Generates Function ID databases for a set of crates"""
+        return self._generate_crates_signatures(meta, output_folder, "fid")

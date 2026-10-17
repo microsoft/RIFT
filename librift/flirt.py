@@ -7,8 +7,9 @@ and Recognition Technology) signature files from COFF object files.
 
 import os
 from librift.utils import exec_cmd
+from librift.sig_backend import SignatureBackend, SignatureBackendError
 
-class FlirtGenerator:
+class FlirtGenerator(SignatureBackend):
     """
     Generator for FLIRT signature files.
 
@@ -16,6 +17,9 @@ class FlirtGenerator:
     object files to pattern (.pat) files and then combining them into a FLIRT
     signature (.sig) file using IDA Pro's sigmake and pcf utilities.
     """
+
+    name = "flirt"
+    extension = ".sig"
 
     def __init__(self, logger, sigmake_path, pcf_path, pat_dir):
         """
@@ -27,11 +31,38 @@ class FlirtGenerator:
             pcf_path (str): Path to the pcf executable (Pattern Creation Utility).
             pat_dir (str): Directory where pattern files will be stored.
         """
-        self.logger = logger
+        super().__init__(logger)
         self.sigmake = sigmake_path
         self.pcf = pcf_path
         self.pat_dir = pat_dir
-    
+
+    def generate(self, coff_files, out_path, meta, crate=None):
+        """
+        Generate a FLIRT signature from the given COFF object files.
+
+        Backend entry point. Wraps the existing two step gen_pat + gen_flirt
+        pipeline so the FLIRT output stays identical to the pre-backend one.
+        The metadata arguments are unused here, since the FLIRT format carries
+        no library identity of its own.
+
+        Args:
+            coff_files (list): Paths to the object files to describe.
+            out_path (str): Absolute output path of the .sig file.
+            meta (RustMetadata): Unused, part of the backend contract.
+            crate (RustCrate, optional): Unused, part of the backend contract.
+
+        Returns:
+            str: Path to the generated FLIRT signature file (out_path).
+
+        Raises:
+            SignatureBackendError: If no pattern file could be produced.
+        """
+        pat_files = self.gen_pat(coff_files)
+        if len(pat_files) < 1:
+            raise SignatureBackendError("Could not generate PAT files!")
+        return self.gen_flirt(self.pat_dir, out_path, ignore_collisions=True)
+
+
     def gen_pat(self, coff_files):
         """
         Generate pattern files from COFF object files.

@@ -85,15 +85,21 @@ class RustMetadata:
         else:
             return self.version_short
 
+    def get_sig_name(self, crate=None, extension=".sig"):
+        """Returns the signature artifact name. crate=None names the rust compiler itself."""
+        suffix = f"{self.get_rust_version()}-{self.get_target_triple()}{extension}"
+        if crate is None:
+            return f"rustc-{suffix}"
+        if crate.version != "":
+            return f"{crate.name}-{crate.version}-{suffix}"
+        return f"{crate.name}-{suffix}"
+
     def get_rustc_flirt_name(self):
         """Returns flirt signature name for rust compiler"""
-        return f"rustc-{self.get_rust_version()}-{self.get_target_triple()}.sig"
+        return self.get_sig_name()
 
     def get_flirt_name(self, crate):
-        if crate.version != "":
-            return f"{crate.name}-{crate.version}-{self.get_rust_version()}-{self.get_target_triple()}.sig"
-        else:
-            return f"{crate.name}-{self.get_rust_version()}-{self.get_target_triple()}.sig"
+        return self.get_sig_name(crate)
 
     def get_rust_version(self):
         """Returns the rust version."""

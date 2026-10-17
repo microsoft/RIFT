@@ -99,10 +99,13 @@ class MetaExtractor:
                 return filetype, arch
 
             # Determine file type and architecture for ELF binaries
-            elif binary.format == lief.EXE_FORMATS.ELF:
+            elif binary.format == lief.ELF.Binary.FORMATS.ELF:
                 self.logger.debug("Detected file type: ELF")
                 filetype = "ELF"
-                machine = binary.header.identity_class
+                # machine_type holds the architecture. identity_class only says
+                # ELF32 vs ELF64, so looking arch up by it never matches and
+                # every ELF binary fell through to an unusable arch string.
+                machine = binary.header.machine_type
                 arch = ELF_ARCH_MAP.get(machine, str(machine))
                 self.logger.debug(f"Detected architecture: {arch}")
                 return filetype, arch

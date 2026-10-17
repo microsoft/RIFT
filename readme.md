@@ -8,11 +8,16 @@
 
 > 🧪 **Experimental Build**
 >
-> This branch is under active development. Functionality may be incomplete or subject to change. **Testing has been conducted on Windows only.** Behaviour on Linux or macOS is untested and not guaranteed.
+> This branch is under active development. Functionality may be incomplete or subject to change. **The FLIRT path has been tested on Windows only.** Behaviour on Linux or macOS is untested and not guaranteed. The Ghidra Function ID path is newly added and has not yet been validated against a real toolchain build.
 
 RIFT (Rust Interactive Function Tool) is a toolsuite to assist reverse engineers in identifying library code in rust malware. It is a research project developed by the MIRAGE Team, explores library recognition techniques conducted on rust binaries and was presented at RECON 2025.
 
-This branch is an updated version, supporting only FLIRT signature generation. For the original version presented at RECON 2025 and also supports BinaryDiffing, see the version_1_stable(https://github.com/microsoft/RIFT/tree/version_1_stable) build.
+This branch is an updated version, generating signatures for **both IDA Pro and Ghidra**: FLIRT
+signatures (`.sig`) and Ghidra Function ID databases (`.fidb`). Pick either or both per run with the
+`--flirt` and `--fidb` flags. Neither disassembler is mandatory — IDA's `pcf`/`sigmake` are needed
+only for FLIRT output, a Ghidra installation only for Function ID output.
+
+For the original version presented at RECON 2025 and also supports BinaryDiffing, see the version_1_stable(https://github.com/microsoft/RIFT/tree/version_1_stable) build.
 
 
 
@@ -27,10 +32,13 @@ This branch is an updated version, supporting only FLIRT signature generation. F
   - Detected Rust crates and their versions
   - File type detection (PE/ELF)
 
-- **FLIRT Signature Generation**: Create FLIRT signatures for:
+- **FLIRT Signature Generation**: Create FLIRT signatures (`.sig`, IDA Pro) for:
   - Rust compiler toolchain (rustc)
   - Individual Rust crates
   - Multiple architectures, tested only on x86 and x86_64
+
+- **Function ID Generation**: Create Function ID databases (`.fidb`, Ghidra) for the same targets,
+  driven by Ghidra's `analyzeHeadless`. Requires a Ghidra installation and a JDK, but no IDA Pro.
 
 - **Multiple Operating Modes**:
   - File analysis mode (run rift_cli.py directly on binaries)
@@ -40,13 +48,22 @@ This branch is an updated version, supporting only FLIRT signature generation. F
 - **Integration in Ida**:
   - Ida Pro Plugin and RIFT_API server to generate FLIRT signature in single RE sessions
 
+- **Integration in Ghidra**:
+  - `scripts/RiftApplyFidFromFolder.java` attaches a folder of generated `.fidb` files and
+    re-applies Function ID matching to the open program
+
 ## Installation
 
 1. Clone the repository
 2. Install dependencies via `py -m pip install -r requirements.txt`
 3. Ensure that rustup and cargo are installed, preferably via: https://rustup.rs/
 4. Place Ida Pro utilities (`pcf`, `sigmake`) and `strings.exe` from preferably SysInternals Suite in the `bin/` directory
-5. Configure `rift_config.cfg` with correct paths
+5. For Function ID (`.fidb`) output, install Ghidra and a JDK, and set `AnalyzeHeadlessPath` in the config to the `analyzeHeadless` launcher inside Ghidra's `support/` folder
+6. Configure `rift_config.cfg` with correct paths
+
+IDA and Ghidra are both optional, but at least one is required to generate signatures. `pcf` and
+`sigmake` are only needed for `--flirt`, `AnalyzeHeadlessPath` only for `--fidb`. RIFT still extracts
+metadata (`--only-meta`) with neither installed.
 
 Furthermore, RIFT depends on `data/rustc_hashes.json` to determine the rust version of the corresponding commit hash. This file should be updated regularily.
 
@@ -55,7 +72,7 @@ To update the `rustc_hashes.json` file, one can simply always pull the latest RI
 
 ## Usage
 
-RIFT can either run as a command line application to generate FLIRT signatures on demand or as an API server appliance, communicating with an Ida Pro Plugin directly.
+RIFT can either run as a command line application to generate signatures on demand or as an API server appliance, communicating with an Ida Pro Plugin directly. Both modes emit FLIRT signatures (`.sig`) for IDA Pro, Function ID databases (`.fidb`) for Ghidra, or both at once.
 
 
 ### CommandLine Mode
@@ -69,10 +86,15 @@ RIFT can either run as a command line application to generate FLIRT signatures o
 | `--verbose` | `-v` | Enable verbose logging | False |
 | `--output` | `-o` | Output folder for signatures | `./Output` |
 | `--only-meta` | - | Print metadata only (file mode) | False |
+| `--flirt` | - | Generate FLIRT signatures (`.sig`, IDA Pro) | False |
+| `--fidb` | - | Generate Function ID databases (`.fidb`, Ghidra) | False |
+
+The two output flags combine: passing both generates both artifacts from a single cargo build.
+Passing neither generates FLIRT signatures, so existing commands keep working unchanged.
 
 #### File Analysis Mode
 
-Run `rift_cli.py` directly on a binary and extract metadata or generate FLIRT signatures on demand:
+Run `rift_cli.py` directly on a binary and extract metadata or generate signatures on demand:
 
 ```bash
 python rift_cli.py -f sample.exe --only-meta
@@ -104,9 +126,21 @@ Generate FLIRT for a compiler toolchain only:
 python rift_cli.py 1.75.0-x86_64-pc-windows-msvc -o ./output
 ```
 
+Generate a Ghidra Function ID database instead of FLIRT signatures:
+```bash
+python rift_cli.py --fidb 1.75.0-x86_64-pc-windows-msvc -o ./output
+```
+
+Generate both artifacts from one build:
+```bash
+python rift_cli.py --flirt --fidb reqwest@0.11.0 1.75.0-x86_64-pc-windows-msvc -o ./output
+```
+
 ### Server Mode
 
-RIFT includes a lightweight HTTP API server (`rift_server.py`) that accepts FLIRT generation jobs from remote clients (e.g. the IDA Pro plugin) and processes them asynchronously in the background.
+RIFT includes a lightweight HTTP API server (`rift_server.py`) that accepts signature generation jobs from remote clients (e.g. the IDA Pro plugin) and processes them asynchronously in the background. Clients select FLIRT, Function ID or both per request.
+
+> **Note:** Function ID (`.fidb`) generation has not been tested in server mode so far. It has only been validated through `rift_cli.py`.
 
 #### Starting the server
 
@@ -127,7 +161,8 @@ The server binds to the IP and port configured in `rift_config.cfg` under `[Rift
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/flirt` | Submit a FLIRT generation job. Returns a `job_id` immediately. |
+| `POST` | `/flirt` | Submit a signature generation job. Returns a `job_id` immediately. |
+| `POST` | `/signatures` | Format-neutral alias of `/flirt`, identical behaviour. |
 | `GET` | `/job?id=<job_id>` | Get the status and result of a specific job. |
 | `GET` | `/jobs[?status=<status>]` | List all jobs, optionally filtered by status (`pending`, `running`, `completed`, `failed`). |
 | `GET` | `/health` | Health check — returns server status and worker state. |
@@ -141,11 +176,17 @@ The server binds to the IP and port configured in `rift_config.cfg` under `[Rift
   "filetype": "PE",
   "crates": [{"name": "reqwest", "version": "0.11.0"}],
   "target_triple": "x86_64-pc-windows-msvc",
-  "output_folder": "/optional/client/path"
+  "output_folder": "/optional/client/path",
+  "flirt": true,
+  "fidb": false
 }
 ```
 
 > **Note:** `output_folder` in the request body is ignored when the server is started with `-o`.
+
+The optional `flirt` and `fidb` booleans mirror the CLI flags and combine the same way. A request
+that sets neither gets FLIRT signatures, which is what the shipped IDA plugin sends. Requesting a
+format the server has no toolchain for is rejected at submission time rather than failing the job.
 
 #### GET /job — Response example
 
@@ -153,7 +194,7 @@ The server binds to the IP and port configured in `rift_config.cfg` under `[Rift
 {
   "job_id": "abc123",
   "status": "completed",
-  "result_files": ["/path/to/output/reqwest.sig"]
+  "result_files": ["/path/to/output/reqwest-0.11.0-1.75.0-x86_64-pc-windows-msvc.sig"]
 }
 ```
 
@@ -209,3 +250,47 @@ Port = 5001
 4. Click **Configure** to verify server connectivity.
 5. Click **Apply** to submit a job to the RIFT server and select a local folder where signatures will be stored.
 6. Generated `.sig` files can be applied to the database via IDA's signature manager or the `ida_apply_flirt_from_folder.py` script in the `scripts/` folder.
+### Ghidra Integration
+
+Ghidra consumes RIFT output as Function ID databases (`.fidb`). There is no Ghidra plugin: RIFT
+generates the databases on the host, and a bundled script attaches them to your project.
+
+For the full configuration reference, re-running Function ID matching and troubleshooting, see the
+[Ghidra usage guide](docs/ghidra_usage_guide.md).
+
+#### Prerequisites
+
+- A Ghidra installation and a JDK matching that Ghidra version
+- `AnalyzeHeadlessPath` in `rift_config.cfg` pointing at the launcher, e.g.
+  `/path/to/ghidra/support/analyzeHeadless` (`analyzeHeadless.bat` on Windows)
+
+RIFT builds each database by invoking `analyzeHeadless` twice against one throwaway project: once to
+import and analyze the extracted object files, and once to run `scripts/RiftPopulateFid.java`, which
+populates the database. The project is created under the configured `WorkFolder` and deleted
+afterwards.
+
+#### Generating databases
+
+```bash
+python rift_cli.py --fidb -f sample.exe -o ./output
+```
+
+Each crate and the toolchain produce one `.fidb` holding a single Function ID library, named after
+the crate, its version and the toolchain:
+
+```
+rustc-1.75.0-x86_64-pc-windows-msvc.fidb
+reqwest-0.11.0-1.75.0-x86_64-pc-windows-msvc.fidb
+```
+
+#### Applying databases
+
+1. Copy `scripts/RiftApplyFidFromFolder.java` into your Ghidra scripts directory (by default
+   `~/ghidra_scripts`), or add `scripts/` as a script path in the Script Manager.
+2. Open the Rust binary in Ghidra and run **RiftApplyFidFromFolder** from the Script Manager.
+3. Select the folder containing the generated `.fidb` files. The script attaches every database in
+   it and re-applies Function ID matching to the open program.
+
+Attached databases persist in your Ghidra configuration, so subsequent programs are matched
+automatically by the Function ID analyzer. They can be managed under
+**Tools → Function ID → Choose active FidDbs**.

@@ -7,6 +7,24 @@ from typing import Optional, List
 from libsrv.flirtjob import JobRegistry, JobStatus, FlirtJob
 from librift.rift_meta import RiftMeta
 from librift.rustmeta import RustMetadata
+from librift.sig_backend import DEFAULT_FORMAT
+
+
+def get_requested_formats(json_data):
+    """
+    Maps the optional "flirt" / "fidb" request fields onto signature formats.
+
+    Each field selects one format and they combine. A request asking for neither
+    gets FLIRT, so the shipped IDA plugin keeps working unchanged.
+    """
+    formats = []
+    if json_data.get("flirt"):
+        formats.append("flirt")
+    if json_data.get("fidb"):
+        formats.append("fid")
+    if not formats:
+        formats.append(DEFAULT_FORMAT)
+    return tuple(formats)
 
 
 class FlirtWorker:
@@ -131,28 +149,50 @@ class FlirtWorker:
         output_folder = json_data.get("output_folder") or self._output_folder
         os.makedirs(output_folder, exist_ok=True)
 
-        # Generate compiler FLIRT
-        self._registry.update_job(job.job_id, progress="Generating compiler FLIRT...")
-        compiler_sig = self._rift_api.generate_compiler_flirt(rust_meta, output_folder)
-        if compiler_sig:
-            result_files.append(str(compiler_sig))
-            if self._storage and self.is_remote:
-                self._storage.register(str(compiler_sig), job_id=job.job_id)
-
-        # Generate crates FLIRT with progress updates
+        formats = get_requested_formats(json_data)
+        self._logger.info(f"Job {job.job_id} requested formats = {', '.join(formats)}")
         crates = rust_meta.get_crates()
-        for i, crate in enumerate(crates, 1):
-            self._registry.update_job(
-                job.job_id,
-                progress=f"Processing crate {i}/{len(crates)}: {crate.get_id()}"
-            )
+
+        for fmt in formats:
+            # Generate the toolchain signature
+            self._registry.update_job(job.job_id, progress=f"Generating compiler {fmt} signature...")
             try:
-                crate_sig = self._rift_api.generate_crate_flirt(rust_meta, crate, output_folder, debug_build=json_data.get("debug_build", False))
-                if crate_sig:
-                    result_files.append(str(crate_sig))
+                compiler_sig = self._generate_compiler(rust_meta, output_folder, fmt)
+                if compiler_sig:
+                    result_files.append(str(compiler_sig))
                     if self._storage and self.is_remote:
-                        self._storage.register(str(crate_sig), job_id=job.job_id)
+                        self._storage.register(str(compiler_sig), job_id=job.job_id)
             except Exception as e:
-                self._logger.warning(f"Failed to generate FLIRT for {crate.get_id()}: {e}")
+                self._logger.warning(f"Failed to generate compiler {fmt} signature: {e}")
+
+            # Generate the crate signatures with progress updates
+            for i, crate in enumerate(crates, 1):
+                self._registry.update_job(
+                    job.job_id,
+                    progress=f"Processing crate {i}/{len(crates)} ({fmt}): {crate.get_id()}"
+                )
+                try:
+                    crate_sig = self._generate_crate(
+                        rust_meta, crate, output_folder, fmt,
+                        debug_build=json_data.get("debug_build", False)
+                    )
+                    if crate_sig:
+                        result_files.append(str(crate_sig))
+                        if self._storage and self.is_remote:
+                            self._storage.register(str(crate_sig), job_id=job.job_id)
+                except Exception as e:
+                    self._logger.warning(f"Failed to generate {fmt} signature for {crate.get_id()}: {e}")
 
         return result_files
+
+    def _generate_compiler(self, rust_meta, output_folder, fmt):
+        """Dispatches the toolchain signature to the engine method of the given format."""
+        if fmt == "flirt":
+            return self._rift_api.generate_compiler_flirt(rust_meta, output_folder)
+        return self._rift_api.generate_compiler_fid(rust_meta, output_folder)
+
+    def _generate_crate(self, rust_meta, crate, output_folder, fmt, debug_build=False):
+        """Dispatches a crate signature to the engine method of the given format."""
+        if fmt == "flirt":
+            return self._rift_api.generate_crate_flirt(rust_meta, crate, output_folder, debug_build=debug_build)
+        return self._rift_api.generate_crate_fid(rust_meta, crate, output_folder, debug_build=debug_build)

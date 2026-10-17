@@ -20,6 +20,7 @@ class TestRiftServerStartup(unittest.TestCase):
     def run_server(self, mode, output):
         config = SimpleNamespace(
             flirt_available=True,
+            fid_available=True,
             server_mode=mode,
             server_storage="server-storage",
             api_key="test-key",
@@ -59,6 +60,7 @@ class TestRiftServerStartup(unittest.TestCase):
 
             config = SimpleNamespace(
                 flirt_available=True,
+                fid_available=True,
                 server_mode="remote",
                 server_storage=storage_folder,
                 api_key="test-key",

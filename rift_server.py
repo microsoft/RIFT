@@ -17,6 +17,7 @@ from librift.rift_cfg import RiftConfig
 from libsrv.flirtjob import JobRegistry, JobStatus
 from libsrv.flirtworker import FlirtWorker
 from libsrv.server_storage import ServerStorage
+from libsrv.flirtworker import get_requested_formats
 
 logger = get_logger()
 
@@ -148,16 +149,27 @@ class RIFT_API():
 
 api = RIFT_API()
 
-@api.post("/flirt")
 def submit_flirt_job(json_data):
-    """Submit FLIRT generation job. Returns job_id immediately."""
-    logger.info("FLIRT job submission received")
+    """Submit a signature generation job. Returns job_id immediately."""
+    logger.info("Signature job submission received")
     logger.debug(json_data)
 
     required_fields = ["commithash", "arch", "filetype", "crates", "target_triple"]
     missing = [f for f in required_fields if f not in json_data]
     if missing:
         return {"error": f"Missing required fields: {missing}", "status": "error"}
+
+    # Optional boolean fields select the output formats, mirroring the CLI flags.
+    # A request that asks for neither gets FLIRT, which is what the shipped IDA
+    # plugin expects.
+    formats = get_requested_formats(json_data)
+    unavailable = [fmt for fmt in formats if not api.rift_api.backend_available(fmt)]
+    if unavailable:
+        return {
+            "error": f"Requested signature formats are not available on this server: {unavailable}",
+            "status": "error"
+        }
+
     if api.output_folder:
         json_data["output_folder"] = api.output_folder
     job = api.job_registry.create_job(json_data)
@@ -166,8 +178,16 @@ def submit_flirt_job(json_data):
     return {
         "job_id": job.job_id,
         "status": job.status.value,
+        "formats": list(formats),
         "message": "Job submitted successfully. Use GET /job?id=<job_id> to check status."
     }
+
+
+# One handler, two paths. /flirt is kept for the shipped IDA plugin, /signatures
+# is the format-neutral name. Registered explicitly because the route decorator
+# does not return the wrapped function.
+api.post("/flirt")(submit_flirt_job)
+api.post("/signatures")(submit_flirt_job)
 
 @api.get("/download")
 def download_flirt(json_data):
@@ -234,9 +254,16 @@ def main(args):
     global logger
     logger = get_logger(args.log, verbose=args.verbose)
     rift_cfg = RiftConfig(logger, args.cfg)
-    if not rift_cfg.flirt_available:
-        logger.error("PCF.exe or sigmake.exe not found. Both files are necessary for rift_server to run")
+    if not rift_cfg.flirt_available and not rift_cfg.fid_available:
+        logger.error(
+            "Neither IDA (PcfPath, SigmakePath) nor Ghidra (AnalyzeHeadlessPath) is configured. "
+            "rift_server needs at least one of them to generate signatures."
+        )
         return
+    if not rift_cfg.flirt_available:
+        logger.warning("PcfPath/SigmakePath not configured. Requests for FLIRT signatures will be rejected.")
+    if not rift_cfg.fid_available:
+        logger.warning("AnalyzeHeadlessPath not configured. Requests for Function ID databases will be rejected.")
 
     if rift_cfg.server_mode == "remote":
         missing = []

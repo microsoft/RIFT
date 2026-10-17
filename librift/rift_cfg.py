@@ -18,6 +18,7 @@ class RiftConfig:
         cargo_proj_folder: Optional[str] = None,
         pcf: Optional[str] = None,
         sigmake: Optional[str] = None,
+        analyze_headless: Optional[str] = None,
         strings: Optional[str] = None,
         # NOTE: treat rustc_hashes strictly as a *path* to a JSON file
         rustc_hashes: Optional[str] = None,
@@ -35,9 +36,11 @@ class RiftConfig:
 
         self.pcf: Optional[str] = None
         self.sigmake: Optional[str] = None
+        self.analyze_headless: Optional[str] = None
         self.work_folder: Optional[str] = None
         self.cargo_proj_folder: Optional[str] = None
         self.flirt_available: bool = True
+        self.fid_available: bool = True
         self.diff_available: bool = True
 
         # Always a dict after _validate_and_finalize()
@@ -88,6 +91,7 @@ class RiftConfig:
         cfg_cargo_proj_folder = _cfg_get("Default", "CargoProjFolder")
         cfg_pcf               = _cfg_get("Default", "PcfPath")
         cfg_sigmake           = _cfg_get("Default", "SigmakePath")
+        cfg_analyze_headless  = _cfg_get("Default", "AnalyzeHeadlessPath")
         cfg_strings           = _cfg_get("Default", "StringsTool")
         cfg_rustc_hashes      = _cfg_get("Default", "RustcHashes")
         cfg_api_ip            = _cfg_get("RiftServer", "Ip")
@@ -104,6 +108,7 @@ class RiftConfig:
         self.cargo_proj_folder = _norm_path(_resolve(cargo_proj_folder, cfg_cargo_proj_folder))
         self.pcf               = _norm_path(_resolve(pcf,               cfg_pcf))
         self.sigmake           = _norm_path(_resolve(sigmake,           cfg_sigmake))
+        self.analyze_headless  = _norm_path(_resolve(analyze_headless,  cfg_analyze_headless))
         self.strings           = _norm_path(_resolve(strings,           cfg_strings))
         rustc_hashes_path      = _norm_path(_resolve(rustc_hashes,      cfg_rustc_hashes, default="NOT_SET"))
         self.api_ip            = _resolve(api_ip,                        cfg_api_ip)
@@ -171,6 +176,21 @@ class RiftConfig:
                 f"SigMakePath = {self.sigmake} does not exist. Flirt signature generation will be disabled."
             )
             self.flirt_available = False
+
+        if not self.analyze_headless or self.analyze_headless == "NOT_SET" or not os.path.isfile(self.analyze_headless):
+            self.logger.warning(
+                f"AnalyzeHeadlessPath = {self.analyze_headless} does not exist. "
+                "Function ID database generation will be disabled."
+            )
+            self.fid_available = False
+
+        if not self.flirt_available and not self.fid_available:
+            # Not an error. RIFT still extracts metadata, and the engine decides
+            # whether the formats actually requested are available.
+            self.logger.warning(
+                "Neither IDA (PcfPath, SigmakePath) nor Ghidra (AnalyzeHeadlessPath) is configured. "
+                "No signature format can be generated."
+            )
 
         if not self.strings or self.strings == "NOT_SET" or not os.path.isfile(self.strings):
             self.logger.warning(

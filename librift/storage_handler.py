@@ -13,6 +13,7 @@ IDB_TOOLCHAIN_FOLDER = "idb_toolchain"
 IDB_CRATES_FOLDER = "idb_crates"
 IDB_CUSTOM_FOLDER = "idb_custom"
 COFF_FOLDER = "coff"
+GHIDRA_FOLDER = "ghidra"
 INFO_FOLDER = "info"
 RLIB_FOLDER = "rlib"
 
@@ -35,6 +36,7 @@ class StorageHandler:
         self.coff_crates_path = None
         self.info_path = None
         self.rlib_path = None
+        self.ghidra_path = None
         self.init_work_folder(self.work_folder)
 
     def init_work_folder(self, path):
@@ -82,6 +84,10 @@ class StorageHandler:
         # Init coff_crates_path
         self.coff_crates_path = os.path.abspath(os.path.join(self.coff_path, "crates"))
         os.makedirs(self.coff_crates_path, exist_ok=True)
+
+        # init folder holding the throwaway Ghidra project of the FID backend
+        self.ghidra_path = os.path.abspath(os.path.join(path, GHIDRA_FOLDER))
+        os.makedirs(self.ghidra_path, exist_ok=True)
 
         # init information files
         self.info_path = os.path.abspath(os.path.join(path, INFO_FOLDER))
